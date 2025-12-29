@@ -1,0 +1,118 @@
+.expenses-page {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.rent-card .rent-info {
+    margin-bottom: var(--spacing-md);
+}
+
+.rent-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.rent-row:last-child {
+    border-bottom: none;
+}
+
+.rent-row.outstanding {
+    padding-top: var(--spacing-md);
+    font-weight: 600;
+}
+
+.rent-action {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.rent-action input {
+    flex: 1;
+}
+
+.expense-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+@media (min-width: 640px) {
+    .expense-summary {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.summary-card {
+    background-color: var(--color-bg-card);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
+
+.summary-label {
+    display: block;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-xs);
+}
+
+.summary-value {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.total-expenses {
+    text-align: center;
+    padding: var(--spacing-md);
+    background-color: var(--color-bg);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-lg);
+    color: var(--color-text-light);
+}
+
+.total-expenses strong {
+    color: var(--color-danger);
+    font-size: var(--font-size-lg);
+}
+
+.filter-tabs {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+    overflow-x: auto;
+    padding-bottom: var(--spacing-xs);
+}
+
+.filter-tab {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: none;
+    background-color: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+}
+
+.filter-tab:hover {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+}
+
+.filter-tab.active {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.expense-card .mobile-card-header>div {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}

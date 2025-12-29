@@ -1,0 +1,107 @@
+.dashboard {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.no-season-card {
+    text-align: center;
+    padding: var(--spacing-2xl);
+    background-color: var(--color-bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+}
+
+.no-season-card h2 {
+    margin: var(--spacing-md) 0 var(--spacing-sm);
+}
+
+.no-season-card p {
+    color: var(--color-text-light);
+    margin-bottom: var(--spacing-lg);
+}
+
+/* Profit Card */
+.profit-card {
+    background: linear-gradient(135deg, #1F2937 0%, #374151 100%);
+    color: white;
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-xl);
+    margin: var(--spacing-lg) 0;
+}
+
+.profit-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+}
+
+.profit-header h3 {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+}
+
+.profit-value {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-sm);
+}
+
+.profit-label {
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    opacity: 0.8;
+}
+
+.profit-breakdown {
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-xs) 0;
+    font-size: var(--font-size-sm);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.breakdown-item span:last-child {
+    font-family: 'SF Mono', 'Roboto Mono', monospace;
+}
+
+/* Quick Stats */
+.quick-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.quick-stat-card {
+    background-color: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.quick-stat-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-xs);
+}
+
+.quick-stat-value {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+@media (min-width: 768px) {
+    .quick-stats {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}

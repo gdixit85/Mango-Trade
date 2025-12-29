@@ -1,0 +1,11 @@
+
+REACT_APP_SUPABASE_URL=https://tbwxcvprseppyljhmssn.supabase.co
+REACT_APP_SUPABASE_PUBLISHABLE_DEFAULT_KEY=sb_publishable_tbKlBykT6dIRkNYlZEIvIQ_KNb3lZRO
+
+Secret API KEY - These API keys allow privileged access to your project's APIs. Use in servers, functions, workers or other backend components of your application.
+sb_secret_rcYLfV9CX3VFnmk59B91gQ_jK4q4adK 
+
+Publishable key- This key is safe to use in a browser if you have enabled Row Level Security (RLS) for your tables and configured policies.
+
+Publishable key - sb_publishable_tbKlBykT6dIRkNYlZEIvIQ_KNb3lZRO
+

@@ -1,0 +1,160 @@
+.settings {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.season-info {
+    padding: var(--spacing-md) 0;
+}
+
+.season-status {
+    margin-bottom: var(--spacing-md);
+}
+
+.season-status h4 {
+    margin-top: var(--spacing-sm);
+    font-size: var(--font-size-xl);
+}
+
+.season-details {
+    background-color: var(--color-bg);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-row span:first-child {
+    color: var(--color-text-light);
+}
+
+.detail-row span:last-child {
+    font-weight: 500;
+}
+
+/* Package List */
+.package-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.package-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-md);
+    background-color: var(--color-bg);
+    border-radius: var(--radius-md);
+}
+
+.package-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.package-name {
+    font-weight: 500;
+}
+
+.package-count {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+}
+
+.package-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+.text-primary {
+    color: var(--color-primary);
+}
+
+/* Pricing Grid */
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+}
+
+@media (min-width: 640px) {
+    .pricing-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 900px) {
+    .pricing-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.pricing-card {
+    background-color: var(--color-bg);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+}
+
+.pricing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.pricing-name {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+}
+
+.pricing-pieces {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.pricing-body {
+    font-size: var(--font-size-sm);
+}
+
+.pricing-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-xs) 0;
+}
+
+.pricing-label {
+    color: var(--color-text-light);
+}
+
+.pricing-value {
+    font-weight: 500;
+    font-family: 'SF Mono', 'Roboto Mono', monospace;
+}
+
+.pricing-row.suggested {
+    margin-top: var(--spacing-xs);
+    padding-top: var(--spacing-sm);
+    border-top: 1px dashed var(--color-border);
+}
+
+.pricing-row.suggested .pricing-label {
+    font-weight: 500;
+}
+
+.pricing-row.suggested .pricing-value {
+    font-weight: 700;
+    font-size: var(--font-size-base);
+}
