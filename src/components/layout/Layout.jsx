@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
     Home,
     Users,
@@ -10,18 +10,25 @@ import {
     Settings,
     Truck,
     Menu,
-    X
+    X,
+    FileText,
+    ClipboardList,
+    LogOut
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSeason } from '../../context/SeasonContext'
+import { useAuth } from '../../context/AuthContext'
+import { supabase } from '../../services/supabase'
 import './Layout.css'
 
 const navItems = [
     { path: '/', icon: Home, label: 'Dashboard' },
-    { path: '/farmers', icon: Users, label: 'Farmers' },
-    { path: '/purchases', icon: ShoppingCart, label: 'Purchases' },
-    { path: '/customers', icon: UserCheck, label: 'Customers' },
     { path: '/sales', icon: CreditCard, label: 'Sales' },
+    { path: '/purchases', icon: ShoppingCart, label: 'Purchases' },
+    { path: '/all-sales', icon: FileText, label: 'All Sales' },
+    { path: '/customers', icon: UserCheck, label: 'Customers' },
+    { path: '/enquiries', icon: ClipboardList, label: 'Enquiries' },
+    { path: '/farmers', icon: Users, label: 'Farmers' },
     { path: '/payments', icon: Receipt, label: 'Payments' },
     { path: '/expenses', icon: Truck, label: 'Expenses' },
     { path: '/reports', icon: PieChart, label: 'Reports' },
@@ -30,10 +37,38 @@ const navItems = [
 
 function Layout({ children }) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const [businessName, setBusinessName] = useState('Dixit Mangoes')
     const { currentSeason } = useSeason()
+    const { logout } = useAuth()
     const location = useLocation()
+    const navigate = useNavigate()
 
     const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
+
+    useEffect(() => {
+        fetchBusinessName()
+    }, [])
+
+    const fetchBusinessName = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'business_name')
+                .maybeSingle()
+
+            if (data?.value) {
+                setBusinessName(data.value)
+            }
+        } catch (error) {
+            console.error('Error fetching business name:', error)
+        }
+    }
+
+    const handleLogout = () => {
+        logout()
+        navigate('/login')
+    }
 
     return (
         <div className="app-container">
@@ -44,8 +79,8 @@ function Layout({ children }) {
                         <Menu size={24} />
                     </button>
                     <div className="header-brand">
-                        <span className="brand-icon">🥭</span>
-                        <span className="brand-name">Mango Trade</span>
+                        <img src="/mango.svg" alt="Logo" className="brand-icon" />
+                        <span className="brand-name">{businessName}</span>
                     </div>
                 </div>
                 <div className="header-right">
@@ -58,6 +93,13 @@ function Layout({ children }) {
                             No Active Season
                         </span>
                     )}
+                    <button
+                        className="btn btn-ghost btn-icon"
+                        onClick={handleLogout}
+                        title="Logout"
+                    >
+                        <LogOut size={20} />
+                    </button>
                 </div>
             </header>
 
@@ -74,6 +116,10 @@ function Layout({ children }) {
                             <span>{label}</span>
                         </NavLink>
                     ))}
+                    <button onClick={handleLogout} className="sidebar-link w-full text-left">
+                        <LogOut size={20} />
+                        <span>Logout</span>
+                    </button>
                 </nav>
             </aside>
 
@@ -82,8 +128,8 @@ function Layout({ children }) {
                 <div className="sidebar-overlay mobile-only" onClick={toggleSidebar}>
                     <aside className="sidebar-mobile" onClick={(e) => e.stopPropagation()}>
                         <div className="sidebar-mobile-header">
-                            <span className="brand-icon">🥭</span>
-                            <span className="brand-name">Mango Trade</span>
+                            <img src="/mango.svg" alt="Logo" className="brand-icon" />
+                            <span className="brand-name">{businessName}</span>
                             <button className="btn btn-ghost btn-icon" onClick={toggleSidebar}>
                                 <X size={24} />
                             </button>
@@ -100,6 +146,10 @@ function Layout({ children }) {
                                     <span>{label}</span>
                                 </NavLink>
                             ))}
+                            <button onClick={handleLogout} className="sidebar-link w-full text-left">
+                                <LogOut size={20} />
+                                <span>Logout</span>
+                            </button>
                         </nav>
                     </aside>
                 </div>

@@ -4,13 +4,14 @@ import { useSeason } from '../context/SeasonContext'
 import { supabase } from '../services/supabase'
 import { useToast } from '../components/common/Toast'
 import { Modal } from '../components/common'
-import { formatCurrency, formatDate, getTodayDate, expenseCategoryLabels } from '../utils/helpers'
+import { formatCurrency, formatDate, getTodayDate } from '../utils/helpers'
 import './Expenses.css'
 
 function Expenses() {
     const { currentSeason, updateSeason } = useSeason()
     const toast = useToast()
     const [expenses, setExpenses] = useState([])
+    const [expenseHeads, setExpenseHeads] = useState([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [editingExpense, setEditingExpense] = useState(null)
@@ -18,7 +19,7 @@ function Expenses() {
     const [filterCategory, setFilterCategory] = useState('all')
 
     const [form, setForm] = useState({
-        category: 'daily',
+        expense_head_id: '',
         description: '',
         amount: '',
         expense_date: getTodayDate()
@@ -28,6 +29,7 @@ function Expenses() {
     const [rentAmount, setRentAmount] = useState('')
 
     useEffect(() => {
+        fetchExpenseHeads()
         if (currentSeason) {
             fetchExpenses()
         } else {
@@ -35,12 +37,28 @@ function Expenses() {
         }
     }, [currentSeason])
 
+    const fetchExpenseHeads = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('expense_heads')
+                .select('*')
+                .eq('is_active', true)
+                .order('is_system', { ascending: false })
+                .order('name')
+
+            if (error) throw error
+            setExpenseHeads(data || [])
+        } catch (error) {
+            console.error('Error fetching expense heads:', error)
+        }
+    }
+
     const fetchExpenses = async () => {
         try {
             setLoading(true)
             const { data, error } = await supabase
                 .from('expenses')
-                .select('*')
+                .select('*, expense_heads(id, name)')
                 .eq('season_id', currentSeason.id)
                 .order('expense_date', { ascending: false })
 
@@ -61,14 +79,24 @@ function Expenses() {
             return
         }
 
+        if (!form.expense_head_id) {
+            toast.error('Please select an expense category')
+            return
+        }
+
         setFormLoading(true)
 
         try {
+            // Get the category name from expense head for backwards compatibility
+            const selectedHead = expenseHeads.find(h => h.id === form.expense_head_id)
+            const categoryName = selectedHead?.name?.toLowerCase() || 'misc'
+
             if (editingExpense) {
                 const { error } = await supabase
                     .from('expenses')
                     .update({
-                        category: form.category,
+                        expense_head_id: form.expense_head_id,
+                        category: categoryName,
                         description: form.description,
                         amount: parseFloat(form.amount),
                         expense_date: form.expense_date
@@ -82,7 +110,8 @@ function Expenses() {
                     .from('expenses')
                     .insert([{
                         season_id: currentSeason.id,
-                        category: form.category,
+                        expense_head_id: form.expense_head_id,
+                        category: categoryName,
                         description: form.description,
                         amount: parseFloat(form.amount),
                         expense_date: form.expense_date
@@ -134,7 +163,7 @@ function Expenses() {
     const openEditModal = (expense) => {
         setEditingExpense(expense)
         setForm({
-            category: expense.category,
+            expense_head_id: expense.expense_head_id || '',
             description: expense.description,
             amount: expense.amount,
             expense_date: expense.expense_date
@@ -144,8 +173,10 @@ function Expenses() {
 
     const openNewModal = () => {
         setEditingExpense(null)
+        // Default to first expense head if available
+        const defaultHeadId = expenseHeads.length > 0 ? expenseHeads[0].id : ''
         setForm({
-            category: 'daily',
+            expense_head_id: defaultHeadId,
             description: '',
             amount: '',
             expense_date: getTodayDate()
@@ -156,23 +187,30 @@ function Expenses() {
     const closeModal = () => {
         setShowModal(false)
         setEditingExpense(null)
+        const defaultHeadId = expenseHeads.length > 0 ? expenseHeads[0].id : ''
         setForm({
-            category: 'daily',
+            expense_head_id: defaultHeadId,
             description: '',
             amount: '',
             expense_date: getTodayDate()
         })
     }
 
-    const getCategoryTotal = (category) => {
+    const getCategoryTotal = (headId) => {
         return expenses
-            .filter(e => e.category === category)
+            .filter(e => e.expense_head_id === headId)
             .reduce((sum, e) => sum + (e.amount || 0), 0)
+    }
+
+    const getExpenseHeadName = (expense) => {
+        if (expense.expense_heads?.name) return expense.expense_heads.name
+        // Fallback to old category field
+        return expense.category ? expense.category.charAt(0).toUpperCase() + expense.category.slice(1) : 'Unknown'
     }
 
     const filteredExpenses = filterCategory === 'all'
         ? expenses
-        : expenses.filter(e => e.category === filterCategory)
+        : expenses.filter(e => e.expense_head_id === filterCategory)
 
     const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0)
 
@@ -239,22 +277,12 @@ function Expenses() {
 
             {/* Expense Summary */}
             <div className="expense-summary">
-                <div className="summary-card">
-                    <span className="summary-label">Transport</span>
-                    <span className="summary-value">{formatCurrency(getCategoryTotal('transport'))}</span>
-                </div>
-                <div className="summary-card">
-                    <span className="summary-label">Daily</span>
-                    <span className="summary-value">{formatCurrency(getCategoryTotal('daily'))}</span>
-                </div>
-                <div className="summary-card">
-                    <span className="summary-label">Delivery</span>
-                    <span className="summary-value">{formatCurrency(getCategoryTotal('delivery'))}</span>
-                </div>
-                <div className="summary-card">
-                    <span className="summary-label">Misc</span>
-                    <span className="summary-value">{formatCurrency(getCategoryTotal('misc'))}</span>
-                </div>
+                {expenseHeads.filter(h => h.name.toLowerCase() !== 'rent').map((head) => (
+                    <div key={head.id} className="summary-card">
+                        <span className="summary-label">{head.name}</span>
+                        <span className="summary-value">{formatCurrency(getCategoryTotal(head.id))}</span>
+                    </div>
+                ))}
             </div>
 
             <div className="total-expenses">
@@ -269,13 +297,13 @@ function Expenses() {
                 >
                     All
                 </button>
-                {Object.entries(expenseCategoryLabels).filter(([k]) => k !== 'rent').map(([key, label]) => (
+                {expenseHeads.filter(h => h.name.toLowerCase() !== 'rent').map((head) => (
                     <button
-                        key={key}
-                        className={`filter-tab ${filterCategory === key ? 'active' : ''}`}
-                        onClick={() => setFilterCategory(key)}
+                        key={head.id}
+                        className={`filter-tab ${filterCategory === head.id ? 'active' : ''}`}
+                        onClick={() => setFilterCategory(head.id)}
                     >
-                        {label}
+                        {head.name}
                     </button>
                 ))}
             </div>
@@ -297,7 +325,7 @@ function Expenses() {
                                 <div>
                                     <span className="mobile-card-title">{expense.description}</span>
                                     <span className={`badge badge-info`}>
-                                        {expenseCategoryLabels[expense.category]}
+                                        {getExpenseHeadName(expense)}
                                     </span>
                                 </div>
                                 <span className="amount text-danger">{formatCurrency(expense.amount)}</span>
@@ -339,14 +367,14 @@ function Expenses() {
                     <div className="form-group">
                         <label>Category *</label>
                         <select
-                            value={form.category}
-                            onChange={(e) => setForm({ ...form, category: e.target.value })}
+                            value={form.expense_head_id}
+                            onChange={(e) => setForm({ ...form, expense_head_id: e.target.value })}
                             required
                         >
-                            <option value="transport">Transport</option>
-                            <option value="daily">Daily Expenses</option>
-                            <option value="delivery">Delivery</option>
-                            <option value="misc">Miscellaneous</option>
+                            <option value="">Select Category</option>
+                            {expenseHeads.filter(h => h.name.toLowerCase() !== 'rent').map((head) => (
+                                <option key={head.id} value={head.id}>{head.name}</option>
+                            ))}
                         </select>
                     </div>
                     <div className="form-group">

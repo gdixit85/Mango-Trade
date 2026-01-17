@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, Package, Save, Plus, Edit2, Trash2, DollarSign, TrendingUp } from 'lucide-react'
+import { Calendar, Package, Save, Plus, Edit2, Trash2, DollarSign, TrendingUp, Wallet } from 'lucide-react'
 import { useSeason } from '../context/SeasonContext'
 import { supabase } from '../services/supabase'
 import { useToast } from '../components/common/Toast'
@@ -36,6 +36,17 @@ function Settings() {
 
     // Margin setting
     const [margin, setMargin] = useState(300)
+    const [marginLoading, setMarginLoading] = useState(false)
+
+    // Expense heads state
+    const [expenseHeads, setExpenseHeads] = useState([])
+    const [showExpenseHeadModal, setShowExpenseHeadModal] = useState(false)
+    const [editingExpenseHead, setEditingExpenseHead] = useState(null)
+    const [expenseHeadForm, setExpenseHeadForm] = useState({
+        name: '',
+        description: ''
+    })
+    const [expenseHeadLoading, setExpenseHeadLoading] = useState(false)
 
     useEffect(() => {
         if (currentSeason) {
@@ -48,6 +59,8 @@ function Settings() {
             })
         }
         fetchPackageSizes()
+        fetchMarginSetting()
+        fetchExpenseHeads()
     }, [currentSeason])
 
     useEffect(() => {
@@ -68,6 +81,40 @@ function Settings() {
             setPackageSizes(data || [])
         } catch (error) {
             console.error('Error fetching package sizes:', error)
+        }
+    }
+
+    const fetchMarginSetting = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'margin_per_dozen')
+                .single()
+
+            if (error) throw error
+            if (data) {
+                setMargin(parseInt(data.value) || 300)
+            }
+        } catch (error) {
+            console.error('Error fetching margin setting:', error)
+        }
+    }
+
+    const saveMarginSetting = async (newMargin) => {
+        setMarginLoading(true)
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .update({ value: newMargin.toString() })
+                .eq('key', 'margin_per_dozen')
+
+            if (error) throw error
+            toast.success('Margin setting saved')
+        } catch (error) {
+            toast.error('Failed to save margin: ' + error.message)
+        } finally {
+            setMarginLoading(false)
         }
     }
 
@@ -237,10 +284,304 @@ function Settings() {
         return calculateSuggestedPrice(pricing.buyingRate, pkg.pieces_per_box, margin)
     }
 
+    // Expense Head functions
+    const fetchExpenseHeads = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('expense_heads')
+                .select('*')
+                .eq('is_active', true)
+                .order('is_system', { ascending: false })
+                .order('name')
+
+            if (error) throw error
+            setExpenseHeads(data || [])
+        } catch (error) {
+            console.error('Error fetching expense heads:', error)
+        }
+    }
+
+    const handleExpenseHeadSubmit = async (e) => {
+        e.preventDefault()
+        setExpenseHeadLoading(true)
+
+        try {
+            if (editingExpenseHead) {
+                const { error } = await supabase
+                    .from('expense_heads')
+                    .update({
+                        name: expenseHeadForm.name,
+                        description: expenseHeadForm.description
+                    })
+                    .eq('id', editingExpenseHead.id)
+
+                if (error) throw error
+                toast.success('Expense head updated')
+            } else {
+                const { error } = await supabase
+                    .from('expense_heads')
+                    .insert([{
+                        name: expenseHeadForm.name,
+                        description: expenseHeadForm.description,
+                        is_system: false,
+                        is_active: true
+                    }])
+
+                if (error) throw error
+                toast.success('Expense head added')
+            }
+
+            setShowExpenseHeadModal(false)
+            setEditingExpenseHead(null)
+            setExpenseHeadForm({ name: '', description: '' })
+            fetchExpenseHeads()
+        } catch (error) {
+            toast.error('Failed to save expense head: ' + error.message)
+        } finally {
+            setExpenseHeadLoading(false)
+        }
+    }
+
+    const handleDeleteExpenseHead = async (head) => {
+        if (head.is_system) {
+            toast.error('Cannot delete system expense heads')
+            return
+        }
+        if (!confirm(`Delete "${head.name}"? Expenses using this head will still be visible but you won't be able to create new ones.`)) return
+
+        try {
+            const { error } = await supabase
+                .from('expense_heads')
+                .update({ is_active: false })
+                .eq('id', head.id)
+
+            if (error) throw error
+            toast.success('Expense head deleted')
+            fetchExpenseHeads()
+        } catch (error) {
+            toast.error('Failed to delete expense head: ' + error.message)
+        }
+    }
+
+    const openEditExpenseHead = (head) => {
+        setEditingExpenseHead(head)
+        setExpenseHeadForm({
+            name: head.name,
+            description: head.description || ''
+        })
+        setShowExpenseHeadModal(true)
+    }
+
+    const openNewExpenseHead = () => {
+        setEditingExpenseHead(null)
+        setExpenseHeadForm({ name: '', description: '' })
+        setShowExpenseHeadModal(true)
+    }
+
+    // Business Profile & Security state
+    const [businessName, setBusinessName] = useState('Dixit Mangoes')
+    const [businessLoading, setBusinessLoading] = useState(false)
+
+    const [pinForm, setPinForm] = useState({
+        currentPin: '',
+        newPin: '',
+        confirmPin: ''
+    })
+    const [pinLoading, setPinLoading] = useState(false)
+
+    useEffect(() => {
+        fetchBusinessSettings()
+    }, [])
+
+    const fetchBusinessSettings = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'business_name')
+                .maybeSingle()
+
+            if (error) throw error
+            if (data) {
+                setBusinessName(data.value)
+            }
+        } catch (error) {
+            console.error('Error fetching business settings:', error)
+        }
+    }
+
+    const saveBusinessName = async () => {
+        if (!businessName.trim()) {
+            toast.error('Business name cannot be empty')
+            return
+        }
+
+        setBusinessLoading(true)
+        try {
+            // Upsert business name
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert(
+                    { key: 'business_name', value: businessName },
+                    { onConflict: 'key' }
+                )
+
+            if (error) throw error
+            toast.success('Business name updated')
+            // Add a small delay then reload to update layout
+            setTimeout(() => window.location.reload(), 1000)
+        } catch (error) {
+            toast.error('Failed to update business name: ' + error.message)
+        } finally {
+            setBusinessLoading(false)
+        }
+    }
+
+    const handlePinChange = async (e) => {
+        e.preventDefault()
+        if (pinForm.newPin.length < 4) {
+            toast.error('New PIN must be at least 4 digits')
+            return
+        }
+        if (pinForm.newPin !== pinForm.confirmPin) {
+            toast.error('New PINs do not match')
+            return
+        }
+
+        setPinLoading(true)
+        try {
+            // Verify current PIN first
+            const { data: currentPinData, error: fetchError } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'admin_pin')
+                .maybeSingle()
+
+            if (fetchError) throw fetchError
+
+            const storedPin = currentPinData?.value || '1234'
+
+            if (pinForm.currentPin !== storedPin) {
+                toast.error('Current PIN is incorrect')
+                setPinLoading(false)
+                return
+            }
+
+            // Update with new PIN
+            const { error: updateError } = await supabase
+                .from('app_settings')
+                .upsert(
+                    { key: 'admin_pin', value: pinForm.newPin },
+                    { onConflict: 'key' }
+                )
+
+            if (updateError) throw updateError
+
+            toast.success('PIN updated successfully')
+            setPinForm({ currentPin: '', newPin: '', confirmPin: '' })
+        } catch (error) {
+            toast.error('Failed to update PIN: ' + error.message)
+        } finally {
+            setPinLoading(false)
+        }
+    }
+
     return (
         <div className="settings">
             <div className="page-header">
                 <h1 className="page-title">Settings</h1>
+            </div>
+
+            {/* Business Profile */}
+            <div className="card mb-3">
+                <div className="card-header">
+                    <div className="flex items-center gap-2">
+                        <Wallet size={20} className="text-primary" />
+                        <h3 className="card-title">Business Profile</h3>
+                    </div>
+                </div>
+                <div className="form-group">
+                    <label>Business Name</label>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={businessName}
+                            onChange={(e) => setBusinessName(e.target.value)}
+                            placeholder="e.g., Dixit Mangoes"
+                            style={{ flex: 1 }}
+                        />
+                        <button
+                            className="btn btn-primary"
+                            onClick={saveBusinessName}
+                            disabled={businessLoading}
+                        >
+                            <Save size={16} />
+                            {businessLoading ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Security Settings */}
+            <div className="card mb-3">
+                <div className="card-header">
+                    <div className="flex items-center gap-2">
+                        <Calendar size={20} className="text-primary" />
+                        <h3 className="card-title">Security Settings</h3>
+                    </div>
+                </div>
+                <form onSubmit={handlePinChange}>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>Current PIN</label>
+                            <input
+                                type="password"
+                                value={pinForm.currentPin}
+                                onChange={(e) => setPinForm({ ...pinForm, currentPin: e.target.value })}
+                                placeholder="Enter current PIN"
+                                className="font-mono"
+                                required
+                            />
+                        </div>
+                        <div className="form-group"></div>
+                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label>New PIN</label>
+                            <input
+                                type="password"
+                                value={pinForm.newPin}
+                                onChange={(e) => setPinForm({ ...pinForm, newPin: e.target.value })}
+                                placeholder="Enter new PIN"
+                                className="font-mono"
+                                required
+                                minLength={4}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Confirm New PIN</label>
+                            <input
+                                type="password"
+                                value={pinForm.confirmPin}
+                                onChange={(e) => setPinForm({ ...pinForm, confirmPin: e.target.value })}
+                                placeholder="Confirm new PIN"
+                                className="font-mono"
+                                required
+                                minLength={4}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-end">
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={pinLoading}
+                        >
+                            <Save size={16} />
+                            {pinLoading ? 'Updating...' : 'Update PIN'}
+                        </button>
+                    </div>
+                </form>
             </div>
 
             {/* Season Configuration */}
@@ -448,7 +789,7 @@ function Settings() {
             </div>
 
             {/* Pricing Margin */}
-            <div className="card">
+            <div className="card mb-3">
                 <div className="card-header">
                     <div className="flex items-center gap-2">
                         <DollarSign size={20} className="text-primary" />
@@ -457,16 +798,76 @@ function Settings() {
                 </div>
                 <div className="form-group">
                     <label>Default Margin per Dozen (₹)</label>
-                    <input
-                        type="number"
-                        value={margin}
-                        onChange={(e) => setMargin(parseInt(e.target.value) || 0)}
-                        placeholder="300"
-                    />
+                    <div className="flex gap-2">
+                        <input
+                            type="number"
+                            value={margin}
+                            onChange={(e) => setMargin(parseInt(e.target.value) || 0)}
+                            placeholder="300"
+                            style={{ flex: 1 }}
+                        />
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => saveMarginSetting(margin)}
+                            disabled={marginLoading}
+                        >
+                            <Save size={16} />
+                            {marginLoading ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
                     <small className="text-muted">
                         Suggested selling price = (Cost per piece × 12) + margin
                     </small>
                 </div>
+            </div>
+
+            {/* Expense Heads */}
+            <div className="card mb-3">
+                <div className="card-header">
+                    <div className="flex items-center gap-2">
+                        <Wallet size={20} className="text-primary" />
+                        <h3 className="card-title">Expense Heads</h3>
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={openNewExpenseHead}>
+                        <Plus size={16} /> Add
+                    </button>
+                </div>
+
+                {expenseHeads.length === 0 ? (
+                    <div className="empty-state">
+                        <p>No expense heads configured. Add expense categories.</p>
+                    </div>
+                ) : (
+                    <div className="package-list">
+                        {expenseHeads.map((head) => (
+                            <div key={head.id} className="package-item">
+                                <div className="package-info">
+                                    <span className="package-name">
+                                        {head.name}
+                                        {head.is_system && (
+                                            <span className="badge badge-info ml-1" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
+                                                System
+                                            </span>
+                                        )}
+                                    </span>
+                                    {head.description && (
+                                        <span className="package-count">{head.description}</span>
+                                    )}
+                                </div>
+                                <div className="package-actions">
+                                    <button className="btn btn-ghost btn-icon" onClick={() => openEditExpenseHead(head)}>
+                                        <Edit2 size={16} />
+                                    </button>
+                                    {!head.is_system && (
+                                        <button className="btn btn-ghost btn-icon text-danger" onClick={() => handleDeleteExpenseHead(head)}>
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Package Size Modal */}
@@ -532,6 +933,58 @@ function Settings() {
                             />
                             <small className="text-muted">Devgad → Pune per box</small>
                         </div>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Expense Head Modal */}
+            <Modal
+                isOpen={showExpenseHeadModal}
+                onClose={() => {
+                    setShowExpenseHeadModal(false)
+                    setEditingExpenseHead(null)
+                }}
+                title={editingExpenseHead ? 'Edit Expense Head' : 'Add Expense Head'}
+                footer={
+                    <>
+                        <button
+                            className="btn btn-outline"
+                            onClick={() => {
+                                setShowExpenseHeadModal(false)
+                                setEditingExpenseHead(null)
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleExpenseHeadSubmit}
+                            disabled={expenseHeadLoading}
+                        >
+                            {expenseHeadLoading ? 'Saving...' : 'Save'}
+                        </button>
+                    </>
+                }
+            >
+                <form onSubmit={handleExpenseHeadSubmit}>
+                    <div className="form-group">
+                        <label>Expense Head Name *</label>
+                        <input
+                            type="text"
+                            placeholder="e.g., Labor, Utilities, Marketing"
+                            value={expenseHeadForm.name}
+                            onChange={(e) => setExpenseHeadForm({ ...expenseHeadForm, name: e.target.value })}
+                            required
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label>Description</label>
+                        <input
+                            type="text"
+                            placeholder="Optional description"
+                            value={expenseHeadForm.description}
+                            onChange={(e) => setExpenseHeadForm({ ...expenseHeadForm, description: e.target.value })}
+                        />
                     </div>
                 </form>
             </Modal>

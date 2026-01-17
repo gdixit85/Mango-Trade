@@ -1,4 +1,4 @@
--- Mango Trade Database Schema
+-- Dixit Mangoes Database Schema
 -- Run this in your Supabase SQL Editor
 
 -- Enable UUID extension
@@ -233,7 +233,8 @@ BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql
+SET search_path = public;
 
 -- Apply trigger to tables with updated_at
 CREATE TRIGGER update_seasons_updated_at BEFORE UPDATE ON seasons

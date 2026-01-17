@@ -146,7 +146,7 @@ function Receipts() {
                     <div className="receipt-detail">
                         <div className="receipt-header-info">
                             <div className="business-info">
-                                <h3>🥭 Mango Trade</h3>
+                                <h3>🥭 Dixit Mangoes</h3>
                                 <p>Pune, Maharashtra</p>
                             </div>
                             <div className="receipt-meta">

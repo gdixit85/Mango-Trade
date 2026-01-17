@@ -1,35 +1,47 @@
-import * as XLSX from 'xlsx'
+// Dynamically import xlsx only when needed (reduces initial bundle by ~870KB)
+let XLSX = null
+
+async function loadXLSX() {
+    if (!XLSX) {
+        XLSX = await import('xlsx')
+    }
+    return XLSX
+}
 
 // Export data to Excel file
-export function exportToExcel(data, filename, sheetName = 'Sheet1') {
+export async function exportToExcel(data, filename, sheetName = 'Sheet1') {
+    const xlsx = await loadXLSX()
+
     // Create workbook
-    const wb = XLSX.utils.book_new()
+    const wb = xlsx.utils.book_new()
 
     // Create worksheet from data
-    const ws = XLSX.utils.json_to_sheet(data)
+    const ws = xlsx.utils.json_to_sheet(data)
 
     // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    xlsx.utils.book_append_sheet(wb, ws, sheetName)
 
     // Generate and download file
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+    xlsx.writeFile(wb, `${filename}.xlsx`)
 }
 
 // Export multiple sheets to Excel
-export function exportMultiSheetExcel(sheets, filename) {
-    const wb = XLSX.utils.book_new()
+export async function exportMultiSheetExcel(sheets, filename) {
+    const xlsx = await loadXLSX()
+    const wb = xlsx.utils.book_new()
 
     sheets.forEach(({ data, name }) => {
-        const ws = XLSX.utils.json_to_sheet(data)
-        XLSX.utils.book_append_sheet(wb, ws, name)
+        const ws = xlsx.utils.json_to_sheet(data)
+        xlsx.utils.book_append_sheet(wb, ws, name)
     })
 
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+    xlsx.writeFile(wb, `${filename}.xlsx`)
 }
 
 // Export credit ledger with header info
-export function exportCreditLedger(customer, ledgerEntries, summary) {
-    const wb = XLSX.utils.book_new()
+export async function exportCreditLedger(customer, ledgerEntries, summary) {
+    const xlsx = await loadXLSX()
+    const wb = xlsx.utils.book_new()
 
     // Create summary data
     const summaryData = [
@@ -60,11 +72,11 @@ export function exportCreditLedger(customer, ledgerEntries, summary) {
     const allData = [...summaryData, ...ledgerHeaders, ...ledgerData]
 
     // Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet(allData)
+    const ws = xlsx.utils.aoa_to_sheet(allData)
 
     // Add to workbook
-    XLSX.utils.book_append_sheet(wb, ws, 'Credit Ledger')
+    xlsx.utils.book_append_sheet(wb, ws, 'Credit Ledger')
 
     // Download
-    XLSX.writeFile(wb, `${customer.name}_Credit_Ledger.xlsx`)
+    xlsx.writeFile(wb, `${customer.name}_Credit_Ledger.xlsx`)
 }

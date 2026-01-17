@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
     TrendingUp,
     TrendingDown,
@@ -9,7 +9,9 @@ import {
     Wallet,
     AlertCircle,
     ArrowRight,
-    Calendar
+    Calendar,
+    ClipboardList,
+    Package
 } from 'lucide-react'
 import { useSeason } from '../context/SeasonContext'
 import { supabase } from '../services/supabase'
@@ -18,6 +20,7 @@ import './Dashboard.css'
 
 function Dashboard() {
     const { currentSeason } = useSeason()
+    const navigate = useNavigate()
     const [stats, setStats] = useState({
         totalPurchases: 0,
         totalSales: 0,
@@ -27,6 +30,8 @@ function Dashboard() {
         totalExpenses: 0
     })
     const [recentActivity, setRecentActivity] = useState([])
+    const [upcomingEnquiries, setUpcomingEnquiries] = useState([])
+    const [stockSummary, setStockSummary] = useState([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -115,6 +120,61 @@ function Dashboard() {
 
             setRecentActivity(recentSales || [])
 
+            // Fetch upcoming enquiries (pending/confirmed, sorted by required_date)
+            const { data: enquiriesData } = await supabase
+                .from('enquiries')
+                .select(`
+                    id,
+                    required_date,
+                    quantity,
+                    customer_id,
+                    customer_name,
+                    customers (name, phone),
+                    package_sizes (name)
+                `)
+                .in('status', ['pending', 'confirmed'])
+                .gte('required_date', new Date().toISOString().split('T')[0])
+                .order('required_date', { ascending: true })
+                .limit(5)
+
+            setUpcomingEnquiries(enquiriesData || [])
+
+            // Fetch stock summary (purchases vs sales per package size)
+            const { data: packageSizes } = await supabase
+                .from('package_sizes')
+                .select('id, name, pieces_per_box')
+                .eq('is_active', true)
+                .order('pieces_per_box')
+
+            const { data: purchaseItems } = await supabase
+                .from('purchase_items')
+                .select('package_size_id, quantity, purchases!inner(season_id)')
+                .eq('purchases.season_id', currentSeason.id)
+
+            const { data: saleItems } = await supabase
+                .from('sale_items')
+                .select('package_size_id, quantity, sales!inner(season_id)')
+                .eq('sales.season_id', currentSeason.id)
+
+            // Calculate stock per package size
+            const stockData = packageSizes?.map(pkg => {
+                const purchased = purchaseItems
+                    ?.filter(pi => pi.package_size_id === pkg.id)
+                    .reduce((sum, pi) => sum + (pi.quantity || 0), 0) || 0
+                const sold = saleItems
+                    ?.filter(si => si.package_size_id === pkg.id)
+                    .reduce((sum, si) => sum + (si.quantity || 0), 0) || 0
+                return {
+                    id: pkg.id,
+                    name: pkg.name,
+                    purchased,
+                    sold,
+                    available: purchased - sold
+                }
+            }) || []
+
+            setStockSummary(stockData)
+
         } catch (error) {
             console.error('Error fetching dashboard data:', error)
         } finally {
@@ -157,6 +217,18 @@ function Dashboard() {
                         {currentSeason.name} ({formatDate(currentSeason.start_date)} - {formatDate(currentSeason.end_date)})
                     </p>
                 </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="quick-actions">
+                <Link to="/sales" className="quick-action-btn quick-action-sale">
+                    <CreditCard size={20} />
+                    <span>New Sale</span>
+                </Link>
+                <Link to="/purchases" className="quick-action-btn quick-action-purchase">
+                    <ShoppingCart size={20} />
+                    <span>New Purchase</span>
+                </Link>
             </div>
 
             {/* Stats Grid */}
@@ -238,6 +310,40 @@ function Dashboard() {
                 </div>
             </div>
 
+            {/* Stock Summary */}
+            <div className="card stock-summary-card">
+                <div className="card-header">
+                    <h3 className="card-title">
+                        <Package size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                        Stock Summary
+                    </h3>
+                </div>
+                {stockSummary.length === 0 ? (
+                    <div className="empty-state">
+                        <p>No stock data available</p>
+                    </div>
+                ) : (
+                    <div className="stock-table">
+                        <div className="stock-header">
+                            <span>Package</span>
+                            <span>Purchased</span>
+                            <span>Sold</span>
+                            <span>Available</span>
+                        </div>
+                        {stockSummary.map((stock) => (
+                            <div key={stock.id} className="stock-row">
+                                <span className="stock-name">{stock.name}</span>
+                                <span className="stock-purchased">{stock.purchased}</span>
+                                <span className="stock-sold">{stock.sold}</span>
+                                <span className={`stock-available ${stock.available > 0 ? 'positive' : stock.available < 0 ? 'negative' : ''}`}>
+                                    {stock.available}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             {/* Recent Activity */}
             <div className="card">
                 <div className="card-header">
@@ -272,6 +378,56 @@ function Dashboard() {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Upcoming Enquiries */}
+            <div className="card">
+                <div className="card-header">
+                    <h3 className="card-title">
+                        <ClipboardList size={18} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                        Upcoming Enquiries
+                    </h3>
+                    <Link to="/enquiries" className="btn btn-ghost btn-sm">
+                        View All <ArrowRight size={16} />
+                    </Link>
+                </div>
+                {upcomingEnquiries.length === 0 ? (
+                    <div className="empty-state">
+                        <p>No upcoming enquiries</p>
+                    </div>
+                ) : (
+                    <div className="mobile-cards">
+                        {upcomingEnquiries.map((enquiry) => {
+                            const customerName = enquiry.customers?.name || enquiry.customer_name || 'Unknown'
+                            return (
+                                <div key={enquiry.id} className="mobile-card enquiry-preview-card">
+                                    <div className="mobile-card-header">
+                                        <span className="mobile-card-title">{customerName}</span>
+                                        <span className="badge badge-info">
+                                            <Calendar size={12} /> {formatDate(enquiry.required_date)}
+                                        </span>
+                                    </div>
+                                    <div className="mobile-card-body">
+                                        {enquiry.quantity && enquiry.package_sizes && (
+                                            <div className="mobile-card-row">
+                                                <span>Order</span>
+                                                <span>{enquiry.quantity} × {enquiry.package_sizes.name}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mobile-card-actions">
+                                        <button
+                                            className="btn btn-success btn-sm"
+                                            onClick={() => navigate(`/sales?enquiry_id=${enquiry.id}`)}
+                                        >
+                                            <ShoppingCart size={14} /> Convert to Sale
+                                        </button>
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
                 )}
             </div>

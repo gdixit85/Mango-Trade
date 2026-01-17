@@ -1,4 +1,4 @@
-# Mango Trade
+# Dixit Mangoes
 
 A seasonal mango trading management application built with React and Supabase.
 

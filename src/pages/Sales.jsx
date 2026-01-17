@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Plus, Search, Trash2, ArrowLeft, ArrowRight, Check, UserPlus, ShoppingCart, CreditCard } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Plus, Search, Trash2, ArrowLeft, ArrowRight, Check, UserPlus, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Truck, X } from 'lucide-react'
 import { useSeason } from '../context/SeasonContext'
 import { supabase } from '../services/supabase'
 import { useToast } from '../components/common/Toast'
@@ -17,9 +18,10 @@ import './Sales.css'
 function Sales() {
     const { currentSeason } = useSeason()
     const toast = useToast()
+    const [searchParams, setSearchParams] = useSearchParams()
+    const enquiryIdFromUrl = searchParams.get('enquiry_id')
 
-    // View state
-    const [view, setView] = useState('list') // 'list' or 'wizard'
+    // Wizard state - no more view toggle, wizard is always visible
     const [wizardStep, setWizardStep] = useState(1) // 1: Customer, 2: Items, 3: Payment
 
     // Data state
@@ -31,6 +33,8 @@ function Sales() {
     const [formLoading, setFormLoading] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [customerSearch, setCustomerSearch] = useState('')
+    const [expandedSales, setExpandedSales] = useState({}) // Track which sales are expanded
+    const [currentEnquiryId, setCurrentEnquiryId] = useState(null) // Track enquiry being converted
 
     // Form state
     const [form, setForm] = useState({
@@ -39,6 +43,7 @@ function Sales() {
         customer_name: '',
         customer_phone: '',
         customer_address: '',
+        needs_delivery: false,
         sale_date: getTodayDate(),
         payment_mode: 'cash',
         payment_status: 'paid',
@@ -47,9 +52,116 @@ function Sales() {
         notes: ''
     })
 
+    // Autocomplete state
+    const [showAutocomplete, setShowAutocomplete] = useState(false)
+    const [isCreatingNew, setIsCreatingNew] = useState(false)
+    const searchInputRef = useRef(null)
+
     useEffect(() => {
         fetchData()
     }, [currentSeason])
+
+    // Handle enquiry conversion from URL param
+    useEffect(() => {
+        // Wait for all data to be loaded before attempting to load enquiry
+        const hasData = customers.length > 0 && packageSizes.length > 0
+        if (enquiryIdFromUrl && hasData && !loading) {
+            loadEnquiryForConversion(enquiryIdFromUrl)
+        }
+    }, [enquiryIdFromUrl, customers.length, packageSizes.length, loading, latestRates])
+
+    const loadEnquiryForConversion = async (enquiryId) => {
+        try {
+            const { data: enquiry, error } = await supabase
+                .from('enquiries')
+                .select(`
+                    *,
+                    customers (id, name, phone, type, address),
+                    package_sizes (id, name, pieces_per_box)
+                `)
+                .eq('id', enquiryId)
+                .single()
+
+            if (error || !enquiry) {
+                toast.error('Could not load enquiry data')
+                return
+            }
+
+            // Store enquiry ID for later
+            setCurrentEnquiryId(enquiryId)
+
+            // Determine the rate if package size exists
+            let itemRate = ''
+            let itemBuyingRate = 0
+            if (enquiry.package_size_id) {
+                const buyingRate = latestRates[enquiry.package_size_id]
+                const pkg = packageSizes.find(p => p.id === enquiry.package_size_id)
+                if (buyingRate && pkg) {
+                    itemRate = calculateSuggestedPrice(buyingRate, pkg.pieces_per_box)
+                    itemBuyingRate = buyingRate
+                }
+            }
+
+            // Pre-fill form with enquiry data
+            if (enquiry.customer_id && enquiry.customers) {
+                const customer = enquiry.customers
+                const customerType = customer.type === 'delivery' ? 'walk-in' : customer.type
+
+                // Build items array
+                const enquiryItems = enquiry.package_size_id ? [{
+                    package_size_id: enquiry.package_size_id,
+                    quantity: enquiry.quantity || 1,
+                    rate_per_dozen: itemRate || '',
+                    buying_rate: itemBuyingRate || 0
+                }] : [{ package_size_id: '', quantity: 1, rate_per_dozen: '', buying_rate: 0 }]
+
+                setForm(prev => ({
+                    ...prev,
+                    customer_id: customer.id,
+                    customer_type: customerType,
+                    customer_name: customer.name,
+                    customer_phone: customer.phone || '',
+                    customer_address: customer.address || '',
+                    payment_status: customerType === 'credit' ? 'pending' : 'paid',
+                    notes: enquiry.notes ? `From enquiry: ${enquiry.notes}` : '',
+                    items: enquiryItems
+                }))
+                setCustomerSearch(customer.name)
+
+                // Auto-advance to step 2 (Items) if we have package data
+                if (enquiry.package_size_id) {
+                    setWizardStep(2)
+                }
+            } else if (enquiry.customer_name) {
+                // Build items array for new customer
+                const enquiryItems = enquiry.package_size_id ? [{
+                    package_size_id: enquiry.package_size_id,
+                    quantity: enquiry.quantity || 1,
+                    rate_per_dozen: itemRate || '',
+                    buying_rate: itemBuyingRate || 0
+                }] : [{ package_size_id: '', quantity: 1, rate_per_dozen: '', buying_rate: 0 }]
+
+                setForm(prev => ({
+                    ...prev,
+                    customer_id: '',
+                    customer_name: enquiry.customer_name,
+                    customer_phone: enquiry.customer_phone || '',
+                    notes: enquiry.notes ? `From enquiry: ${enquiry.notes}` : '',
+                    items: enquiryItems
+                }))
+                setCustomerSearch(enquiry.customer_name)
+                setIsCreatingNew(true)
+            }
+
+            // Clear URL param to prevent re-loading on navigation
+            setSearchParams({})
+            toast.info('Enquiry loaded - complete the sale details')
+
+        } catch (error) {
+            console.error('Error loading enquiry:', error)
+            toast.error('Failed to load enquiry')
+        }
+    }
 
     const fetchData = async () => {
         try {
@@ -115,27 +227,51 @@ function Sales() {
 
     // Customer selection/creation
     const handleSelectCustomer = (customer) => {
+        // Map legacy 'delivery' type to 'walk-in' with delivery flag
+        const customerType = customer.type === 'delivery' ? 'walk-in' : customer.type
         setForm({
             ...form,
             customer_id: customer.id,
-            customer_type: customer.type,
+            customer_type: customerType,
             customer_name: customer.name,
             customer_phone: customer.phone || '',
             customer_address: customer.address || '',
-            payment_status: customer.type === 'credit' ? 'pending' : 'paid'
+            needs_delivery: customer.type === 'delivery',
+            payment_status: customerType === 'credit' ? 'pending' : 'paid'
         })
-        setWizardStep(2)
+        setCustomerSearch(customer.name)
+        setShowAutocomplete(false)
+        setIsCreatingNew(false)
     }
 
-    const handleCreateNewCustomer = () => {
+    const handleStartNewCustomer = () => {
         setForm({
             ...form,
             customer_id: '',
             customer_name: customerSearch || '',
             customer_phone: '',
             customer_address: '',
-            customer_type: 'walk-in'
+            customer_type: 'walk-in',
+            needs_delivery: false
         })
+        setIsCreatingNew(true)
+        setShowAutocomplete(false)
+    }
+
+    const handleClearCustomer = () => {
+        setForm({
+            ...form,
+            customer_id: '',
+            customer_name: '',
+            customer_phone: '',
+            customer_address: '',
+            customer_type: 'walk-in',
+            needs_delivery: false
+        })
+        setCustomerSearch('')
+        setIsCreatingNew(false)
+        setShowAutocomplete(false)
+        searchInputRef.current?.focus()
     }
 
     const handleItemChange = (index, field, value) => {
@@ -217,7 +353,7 @@ function Sales() {
             const invoiceNumber = generateInvoiceNumber('MT')
             const amountPaid = form.payment_status === 'paid' ? totalAmount : 0
 
-            // Create sale
+            // Create sale with enquiry_id if converting
             const { data: sale, error: saleError } = await supabase
                 .from('sales')
                 .insert([{
@@ -230,7 +366,8 @@ function Sales() {
                     total_amount: totalAmount,
                     amount_paid: amountPaid,
                     delivery_charge: parseFloat(form.delivery_charge) || 0,
-                    notes: form.notes
+                    notes: form.notes,
+                    enquiry_id: currentEnquiryId || null
                 }])
                 .select()
                 .single()
@@ -264,7 +401,16 @@ function Sales() {
                     .eq('id', customerId)
             }
 
+            // Auto-mark enquiry as fulfilled if this sale was from an enquiry
+            if (currentEnquiryId) {
+                await supabase
+                    .from('enquiries')
+                    .update({ status: 'fulfilled' })
+                    .eq('id', currentEnquiryId)
+            }
+
             toast.success(`Sale recorded! Invoice: ${invoiceNumber}`)
+            setCurrentEnquiryId(null) // Clear enquiry reference
             resetWizard()
             fetchData()
         } catch (error) {
@@ -274,21 +420,18 @@ function Sales() {
         }
     }
 
-    const startNewSale = () => {
-        resetWizard()
-        setView('wizard')
-    }
-
     const resetWizard = () => {
-        setView('list')
         setWizardStep(1)
         setCustomerSearch('')
+        setShowAutocomplete(false)
+        setIsCreatingNew(false)
         setForm({
             customer_id: '',
             customer_type: 'walk-in',
             customer_name: '',
             customer_phone: '',
             customer_address: '',
+            needs_delivery: false,
             sale_date: getTodayDate(),
             payment_mode: 'cash',
             payment_status: 'paid',
@@ -296,6 +439,13 @@ function Sales() {
             delivery_charge: 0,
             notes: ''
         })
+    }
+
+    const toggleSaleExpanded = (saleId) => {
+        setExpandedSales(prev => ({
+            ...prev,
+            [saleId]: !prev[saleId]
+        }))
     }
 
     const canProceedToStep2 = () => {
@@ -329,15 +479,12 @@ function Sales() {
         )
     }
 
-    // Wizard View
-    if (view === 'wizard') {
-        return (
-            <div className="sales-page wizard-view">
-                {/* Wizard Header */}
+    // Unified View - Wizard always visible at top, recent bookings below
+    return (
+        <div className="sales-page sales-unified-view">
+            {/* Wizard Section - Always Visible */}
+            <div className="wizard-section">
                 <div className="wizard-header">
-                    <button className="btn btn-ghost" onClick={resetWizard}>
-                        <ArrowLeft size={20} /> Cancel
-                    </button>
                     <h2>New Sale</h2>
                     <div className="wizard-total">
                         {formatCurrency(calculateTotal())}
@@ -365,31 +512,107 @@ function Sales() {
                 {/* Step 1: Customer Selection */}
                 {wizardStep === 1 && (
                     <div className="wizard-content">
-                        <div className="search-bar">
-                            <Search size={20} className="search-icon" />
-                            <input
-                                type="text"
-                                placeholder="Search customer by name or phone..."
-                                value={customerSearch}
-                                onChange={(e) => {
-                                    setCustomerSearch(e.target.value)
-                                    handleCreateNewCustomer()
-                                }}
-                                autoFocus
-                            />
+                        {/* Search with Autocomplete */}
+                        <div className="customer-search-container">
+                            <div className="search-bar">
+                                <Search size={20} className="search-icon" />
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    placeholder="Search customer by name or phone..."
+                                    value={customerSearch}
+                                    onChange={(e) => {
+                                        setCustomerSearch(e.target.value)
+                                        setShowAutocomplete(e.target.value.length > 0)
+                                        if (form.customer_id) {
+                                            // Clear selected customer when typing
+                                            setForm({ ...form, customer_id: '', customer_name: '' })
+                                        }
+                                        setIsCreatingNew(false)
+                                    }}
+                                    onFocus={() => setShowAutocomplete(customerSearch.length > 0)}
+                                    autoFocus
+                                />
+                                {(customerSearch || form.customer_id) && (
+                                    <button className="btn-clear-search" onClick={handleClearCustomer}>
+                                        <X size={18} />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Autocomplete Dropdown */}
+                            {showAutocomplete && customerSearch && !form.customer_id && (
+                                <div className="autocomplete-dropdown">
+                                    {filteredCustomers.length > 0 ? (
+                                        <>
+                                            {filteredCustomers.slice(0, 6).map(customer => (
+                                                <div
+                                                    key={customer.id}
+                                                    className="autocomplete-item"
+                                                    onClick={() => handleSelectCustomer(customer)}
+                                                >
+                                                    <div className="autocomplete-item-main">
+                                                        <span className="autocomplete-name">{customer.name}</span>
+                                                        <span className={`badge badge-sm badge-${customer.type === 'credit' ? 'warning' : 'info'}`}>
+                                                            {customerTypeLabels[customer.type] || 'Walk-in'}
+                                                        </span>
+                                                    </div>
+                                                    {customer.phone && (
+                                                        <span className="autocomplete-phone">{customer.phone}</span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <div className="autocomplete-divider"></div>
+                                        </>
+                                    ) : null}
+                                    <div
+                                        className="autocomplete-item autocomplete-new"
+                                        onClick={handleStartNewCustomer}
+                                    >
+                                        <UserPlus size={18} />
+                                        <span>Create "{customerSearch}" as new customer</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
+                        {/* Selected Customer Display */}
+                        {form.customer_id && (
+                            <div className="selected-customer-card">
+                                <div className="selected-customer-info">
+                                    <div className="selected-customer-main">
+                                        <span className="selected-customer-name">{form.customer_name}</span>
+                                        <span className={`badge badge-${form.customer_type === 'credit' ? 'warning' : 'info'}`}>
+                                            {customerTypeLabels[form.customer_type] || 'Walk-in'}
+                                        </span>
+                                    </div>
+                                    {form.customer_phone && (
+                                        <span className="selected-customer-phone">{form.customer_phone}</span>
+                                    )}
+                                </div>
+                                <button className="btn btn-ghost btn-sm" onClick={handleClearCustomer}>
+                                    Change
+                                </button>
+                            </div>
+                        )}
+
                         {/* New Customer Form */}
-                        {(!form.customer_id && (customerSearch || form.customer_name)) && (
-                            <div className="card new-customer-card mb-3">
-                                <h4>Create New Customer</h4>
+                        {isCreatingNew && !form.customer_id && (
+                            <div className="card new-customer-card">
+                                <div className="new-customer-header">
+                                    <h4><UserPlus size={18} /> New Customer</h4>
+                                    <button className="btn btn-ghost btn-sm" onClick={() => setIsCreatingNew(false)}>
+                                        <X size={16} />
+                                    </button>
+                                </div>
                                 <div className="form-group">
-                                    <label>Name</label>
+                                    <label>Name *</label>
                                     <input
                                         type="text"
                                         placeholder="Customer name"
                                         value={form.customer_name}
                                         onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
+                                        autoFocus
                                     />
                                 </div>
                                 <div className="form-row">
@@ -403,7 +626,7 @@ function Sales() {
                                         />
                                     </div>
                                     <div className="form-group">
-                                        <label>Type</label>
+                                        <label>Payment Type</label>
                                         <select
                                             value={form.customer_type}
                                             onChange={(e) => setForm({
@@ -412,15 +635,28 @@ function Sales() {
                                                 payment_status: e.target.value === 'credit' ? 'pending' : 'paid'
                                             })}
                                         >
-                                            <option value="walk-in">Walk-in</option>
-                                            <option value="delivery">Delivery</option>
-                                            <option value="credit">Credit</option>
+                                            <option value="walk-in">Walk-in (Pays Now)</option>
+                                            <option value="credit">Credit (Pays Later)</option>
                                         </select>
                                     </div>
                                 </div>
-                                {(form.customer_type === 'delivery' || form.customer_type === 'credit') && (
-                                    <div className="form-group">
-                                        <label>Address</label>
+                            </div>
+                        )}
+
+                        {/* Delivery Toggle - Available for any customer */}
+                        {(form.customer_id || isCreatingNew) && (
+                            <div className="delivery-toggle-section">
+                                <label className="toggle-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.needs_delivery}
+                                        onChange={(e) => setForm({ ...form, needs_delivery: e.target.checked })}
+                                    />
+                                    <Truck size={18} />
+                                    <span>Needs Delivery</span>
+                                </label>
+                                {form.needs_delivery && (
+                                    <div className="form-group delivery-address-field">
                                         <input
                                             type="text"
                                             placeholder="Delivery address"
@@ -429,28 +665,6 @@ function Sales() {
                                         />
                                     </div>
                                 )}
-                            </div>
-                        )}
-
-                        {/* Existing Customers List */}
-                        {filteredCustomers.length > 0 && (
-                            <div className="customer-list">
-                                <h4>Select Existing Customer</h4>
-                                {filteredCustomers.slice(0, 10).map(customer => (
-                                    <div
-                                        key={customer.id}
-                                        className={`customer-option ${form.customer_id === customer.id ? 'selected' : ''}`}
-                                        onClick={() => handleSelectCustomer(customer)}
-                                    >
-                                        <div className="customer-info">
-                                            <span className="customer-name">{customer.name}</span>
-                                            <span className={`badge badge-${customer.type === 'credit' ? 'warning' : 'info'}`}>
-                                                {customerTypeLabels[customer.type]}
-                                            </span>
-                                        </div>
-                                        {customer.phone && <span className="customer-phone">{customer.phone}</span>}
-                                    </div>
-                                ))}
                             </div>
                         )}
 
@@ -529,10 +743,10 @@ function Sales() {
                             </button>
                         </div>
 
-                        {/* Delivery Charge */}
-                        {(form.customer_type === 'delivery' || form.customer_type === 'credit') && (
-                            <div className="form-group mt-3">
-                                <label>Delivery Charge (₹)</label>
+                        {/* Delivery Charge - shown when delivery is needed */}
+                        {form.needs_delivery && (
+                            <div className="form-group mt-3 delivery-charge-field">
+                                <label><Truck size={16} /> Delivery Charge (₹)</label>
                                 <input
                                     type="number"
                                     value={form.delivery_charge}
@@ -596,15 +810,32 @@ function Sales() {
 
                         <div className="payment-options">
                             <h4>Payment</h4>
-                            <div className="form-row">
+
+                            {/* Credit customer choice first */}
+                            {form.customer_type === 'credit' && (
                                 <div className="form-group">
-                                    <label>Date</label>
-                                    <input
-                                        type="date"
-                                        value={form.sale_date}
-                                        onChange={(e) => setForm({ ...form, sale_date: e.target.value })}
-                                    />
+                                    <label>Payment Status</label>
+                                    <select
+                                        value={form.payment_status}
+                                        onChange={(e) => setForm({ ...form, payment_status: e.target.value })}
+                                    >
+                                        <option value="pending">Add to Credit (Pay Later)</option>
+                                        <option value="paid">Paying Now</option>
+                                    </select>
                                 </div>
+                            )}
+
+                            <div className="form-group">
+                                <label>Sale Date</label>
+                                <input
+                                    type="date"
+                                    value={form.sale_date}
+                                    onChange={(e) => setForm({ ...form, sale_date: e.target.value })}
+                                />
+                            </div>
+
+                            {/* Only show payment mode if customer is paying now */}
+                            {(form.customer_type !== 'credit' || form.payment_status === 'paid') && (
                                 <div className="form-group">
                                     <label>Payment Mode</label>
                                     <select
@@ -613,19 +844,6 @@ function Sales() {
                                     >
                                         <option value="cash">Cash</option>
                                         <option value="online">Online</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {form.customer_type === 'credit' && (
-                                <div className="form-group">
-                                    <label>Payment Status</label>
-                                    <select
-                                        value={form.payment_status}
-                                        onChange={(e) => setForm({ ...form, payment_status: e.target.value })}
-                                    >
-                                        <option value="pending">Add to Credit</option>
-                                        <option value="paid">Paid Now</option>
                                     </select>
                                 </div>
                             )}
@@ -660,80 +878,91 @@ function Sales() {
                     </div>
                 )}
             </div>
-        )
-    }
 
-    // List View
-    return (
-        <div className="sales-page">
-            <div className="page-header">
-                <h1 className="page-title">Sales</h1>
-                <button className="btn btn-primary" onClick={startNewSale}>
-                    <Plus size={18} /> New Sale
-                </button>
-            </div>
-
-            {/* Search */}
-            <div className="search-bar">
-                <Search size={20} className="search-icon" />
-                <input
-                    type="text"
-                    placeholder="Search by customer or invoice..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
-            </div>
-
+            {/* Recent Bookings Section */}
             {loading ? (
                 <div className="loading-container">
                     <div className="spinner"></div>
                 </div>
-            ) : filteredSales.length === 0 ? (
-                <div className="empty-state">
-                    <p>{searchQuery ? 'No sales found' : 'No sales recorded yet'}</p>
-                    {!searchQuery && (
-                        <button className="btn btn-primary mt-2" onClick={startNewSale}>
-                            Make First Sale
-                        </button>
-                    )}
-                </div>
-            ) : (
-                <div className="mobile-cards">
-                    {filteredSales.map((sale) => (
-                        <div key={sale.id} className="mobile-card sale-card">
-                            <div className="mobile-card-header">
-                                <div>
-                                    <span className="mobile-card-title">{sale.customers?.name || 'Walk-in'}</span>
-                                    <span className={`badge ${sale.payment_status === 'paid' ? 'badge-success' : 'badge-warning'}`}>
-                                        {paymentStatusLabels[sale.payment_status]}
-                                    </span>
-                                </div>
-                                <span className="amount">{formatCurrency(sale.total_amount)}</span>
-                            </div>
-                            <div className="mobile-card-body">
-                                <div className="mobile-card-row">
-                                    <span>Invoice</span>
-                                    <span>{sale.invoice_number}</span>
-                                </div>
-                                <div className="mobile-card-row">
-                                    <span>Date</span>
-                                    <span>{formatDate(sale.sale_date)}</span>
-                                </div>
-                                <div className="mobile-card-row">
-                                    <span>Payment</span>
-                                    <span>{sale.payment_mode === 'cash' ? 'Cash' : 'Online'}</span>
-                                </div>
-                            </div>
-                            <div className="sale-items">
-                                {sale.sale_items?.map((item, idx) => (
-                                    <div key={idx} className="sale-item-row">
-                                        <span>{item.package_sizes?.name} × {item.quantity}</span>
-                                        <span>@ {formatCurrency(item.rate_per_dozen)}</span>
-                                    </div>
-                                ))}
-                            </div>
+            ) : sales.length > 0 && (
+                <div className="recent-bookings-section">
+                    <div className="section-header">
+                        <h3>Recent Bookings</h3>
+                        <div className="search-bar">
+                            <Search size={20} className="search-icon" />
+                            <input
+                                type="text"
+                                placeholder="Search..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
                         </div>
-                    ))}
+                    </div>
+
+                    {filteredSales.length === 0 ? (
+                        <div className="empty-state">
+                            <p>No sales found</p>
+                        </div>
+                    ) : (
+                        <div className="bookings-list">
+                            {filteredSales.map((sale) => {
+                                const isExpanded = expandedSales[sale.id]
+                                return (
+                                    <div key={sale.id} className={`booking-card-compact ${isExpanded ? 'expanded' : ''}`}>
+                                        {/* Compact 2-line layout */}
+                                        <div className="booking-compact-content">
+                                            <div className="booking-line-1">
+                                                <span className="customer-name">{sale.customers?.name || 'Walk-in'}</span>
+                                                <span className="invoice-number">{sale.invoice_number}</span>
+                                                <span className="amount">{formatCurrency(sale.total_amount)}</span>
+                                            </div>
+                                            <div className="booking-line-2">
+                                                <span className="date">{formatDate(sale.sale_date)}</span>
+                                                <span className={`badge ${sale.payment_status === 'paid' ? 'badge-success' : 'badge-warning'}`}>
+                                                    {paymentStatusLabels[sale.payment_status]}
+                                                </span>
+                                                <button
+                                                    className="btn-view-more"
+                                                    onClick={() => toggleSaleExpanded(sale.id)}
+                                                >
+                                                    {isExpanded ? (
+                                                        <><ChevronUp size={16} /> Less</>
+                                                    ) : (
+                                                        <><ChevronDown size={16} /> More</>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Expanded details */}
+                                        {isExpanded && (
+                                            <div className="booking-expanded-content">
+                                                <div className="detail-row">
+                                                    <span>Payment Mode:</span>
+                                                    <span>{sale.payment_mode === 'cash' ? 'Cash' : 'Online'}</span>
+                                                </div>
+                                                <div className="items-detail">
+                                                    <strong>Items:</strong>
+                                                    {sale.sale_items?.map((item, idx) => (
+                                                        <div key={idx} className="item-detail-row">
+                                                            <span>{item.package_sizes?.name} × {item.quantity}</span>
+                                                            <span>@ {formatCurrency(item.rate_per_dozen)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {sale.notes && (
+                                                    <div className="detail-row">
+                                                        <span>Notes:</span>
+                                                        <span>{sale.notes}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

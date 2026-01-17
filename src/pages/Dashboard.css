@@ -3,6 +3,48 @@
     margin: 0 auto;
 }
 
+/* Quick Actions */
+.quick-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.quick-action-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+    font-size: var(--font-size-base);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-sm);
+}
+
+.quick-action-sale {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: white;
+}
+
+.quick-action-sale:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.quick-action-purchase {
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+    color: white;
+}
+
+.quick-action-purchase:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
 .no-season-card {
     text-align: center;
     padding: var(--spacing-2xl);
@@ -104,4 +146,67 @@
     .quick-stats {
         grid-template-columns: repeat(4, 1fr);
     }
+}
+
+/* Stock Summary */
+.stock-summary-card {
+    margin-bottom: var(--spacing-lg);
+}
+
+.stock-table {
+    padding: var(--spacing-md);
+}
+
+.stock-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--color-bg-alt);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stock-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--color-border);
+    align-items: center;
+}
+
+.stock-row:last-child {
+    border-bottom: none;
+}
+
+.stock-name {
+    font-weight: 500;
+}
+
+.stock-purchased {
+    color: var(--color-info);
+    font-weight: 500;
+}
+
+.stock-sold {
+    color: var(--color-warning);
+    font-weight: 500;
+}
+
+.stock-available {
+    font-weight: 700;
+    font-size: var(--font-size-lg);
+}
+
+.stock-available.positive {
+    color: var(--color-success);
+}
+
+.stock-available.negative {
+    color: var(--color-danger);
 }

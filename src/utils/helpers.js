@@ -68,10 +68,9 @@ export function debounce(func, wait) {
     }
 }
 
-// Customer type labels
+// Customer type labels (delivery is now a separate toggle)
 export const customerTypeLabels = {
     'walk-in': 'Walk-in',
-    'delivery': 'Delivery',
     'credit': 'Credit'
 }
 
@@ -90,3 +89,18 @@ export const expenseCategoryLabels = {
     'delivery': 'Delivery',
     'misc': 'Miscellaneous'
 }
+
+// Enquiry status labels
+export const enquiryStatusLabels = {
+    'pending': 'Pending',
+    'confirmed': 'Confirmed',
+    'fulfilled': 'Fulfilled',
+    'cancelled': 'Cancelled'
+}
+
+// Enquiry type labels
+export const enquiryTypeLabels = {
+    'availability': 'Availability Check',
+    'advance_order': 'Advance Order'
+}
+
