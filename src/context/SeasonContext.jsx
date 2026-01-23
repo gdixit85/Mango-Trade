@@ -31,6 +31,17 @@ export function SeasonProvider({ children }) {
     }
 
     const createSeason = async (seasonData) => {
+        // Deactivate all existing active seasons first
+        const { error: deactivateError } = await supabase
+            .from('seasons')
+            .update({ is_active: false })
+            .eq('is_active', true)
+
+        if (deactivateError) {
+            console.error('Error deactivating existing seasons:', deactivateError)
+            throw deactivateError
+        }
+
         const { data, error } = await supabase
             .from('seasons')
             .insert([{ ...seasonData, is_active: true }])

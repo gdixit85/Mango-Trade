@@ -1,18 +1,40 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Lock, ArrowRight, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../services/supabase'
 import './Login.css'
 
 function Login() {
     const [pin, setPin] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [businessName, setBusinessName] = useState('Dixit Mangoes')
     const { login } = useAuth()
     const navigate = useNavigate()
     const location = useLocation()
 
     const from = location.state?.from?.pathname || '/'
+
+    useEffect(() => {
+        fetchBusinessName()
+    }, [])
+
+    const fetchBusinessName = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'business_name')
+                .maybeSingle()
+
+            if (data?.value) {
+                setBusinessName(data.value)
+            }
+        } catch (error) {
+            console.error('Error fetching business name:', error)
+        }
+    }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -49,9 +71,9 @@ function Login() {
             <div className="login-card">
                 <div className="login-header">
                     <div className="brand-logo">
-                        <img src="/mango.svg" alt="Dixit Mangoes" />
+                        <img src="/mango.svg" alt={businessName} />
                     </div>
-                    <h1>Dixit Mangoes</h1>
+                    <h1>{businessName}</h1>
                     <p className="login-subtitle">Enter PIN to access the system</p>
                 </div>
 
