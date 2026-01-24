@@ -27,7 +27,11 @@ function Dashboard() {
         farmerDues: 0,
         customerOutstanding: 0,
         todaySales: 0,
-        totalExpenses: 0
+        farmerDues: 0,
+        customerOutstanding: 0,
+        todaySales: 0,
+        totalExpenses: 0,
+        salesBreakdown: { cash: 0, online: 0, credit: 0 }
     })
     const [recentActivity, setRecentActivity] = useState([])
     const [upcomingEnquiries, setUpcomingEnquiries] = useState([])
@@ -61,6 +65,22 @@ function Dashboard() {
                 .eq('season_id', currentSeason.id)
 
             const totalSales = sales?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
+
+            // Sales Breakdown
+            const salesBreakdown = {
+                cash: 0,
+                online: 0,
+                credit: 0
+            }
+
+            sales?.forEach(s => {
+                if (s.payment_status === 'paid') {
+                    if (s.payment_mode === 'online') salesBreakdown.online += (s.total_amount || 0)
+                    else salesBreakdown.cash += (s.total_amount || 0)
+                } else {
+                    salesBreakdown.credit += (s.total_amount || 0)
+                }
+            })
 
             // Today's sales
             const today = new Date().toISOString().split('T')[0]
@@ -101,7 +121,10 @@ function Dashboard() {
                 farmerDues,
                 customerOutstanding,
                 todaySales,
-                totalExpenses: totalExpenses + rentPaid
+                customerOutstanding,
+                todaySales,
+                totalExpenses: totalExpenses + rentPaid,
+                salesBreakdown
             })
 
             // Fetch recent sales
@@ -306,6 +329,27 @@ function Dashboard() {
                     <div className="quick-stat-label">Rent (Paid/Total)</div>
                     <div className="quick-stat-value">
                         {formatCurrency(currentSeason.rent_paid || 0)} / {formatCurrency(currentSeason.rent_amount || 0)}
+                    </div>
+                </div>
+            </div>
+
+            {/* Sales Breakdown Card */}
+            <div className="card">
+                <div className="card-header">
+                    <h3 className="card-title">Sales Breakdown</h3>
+                </div>
+                <div className="breakdown-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', padding: '1rem' }}>
+                    <div className="breakdown-stat" style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Cash</div>
+                        <div style={{ fontWeight: '600', color: '#10b981' }}>{formatCurrency(stats.salesBreakdown?.cash || 0)}</div>
+                    </div>
+                    <div className="breakdown-stat" style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Online</div>
+                        <div style={{ fontWeight: '600', color: '#3b82f6' }}>{formatCurrency(stats.salesBreakdown?.online || 0)}</div>
+                    </div>
+                    <div className="breakdown-stat" style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Credit</div>
+                        <div style={{ fontWeight: '600', color: '#f59e0b' }}>{formatCurrency(stats.salesBreakdown?.credit || 0)}</div>
                     </div>
                 </div>
             </div>

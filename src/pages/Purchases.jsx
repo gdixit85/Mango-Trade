@@ -13,6 +13,7 @@ function Purchases() {
     const [purchases, setPurchases] = useState([])
     const [farmers, setFarmers] = useState([])
     const [packageSizes, setPackageSizes] = useState([])
+    const [marginPerDozen, setMarginPerDozen] = useState(300) // Default
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [formLoading, setFormLoading] = useState(false)
@@ -47,6 +48,17 @@ function Purchases() {
                 .eq('is_active', true)
                 .order('pieces_per_box')
             setPackageSizes(packageData || [])
+
+            // Fetch margin setting
+            const { data: marginSetting } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'margin_per_dozen')
+                .single()
+
+            if (marginSetting?.value) {
+                setMarginPerDozen(parseInt(marginSetting.value))
+            }
 
             // Fetch purchases
             if (currentSeason) {
@@ -297,7 +309,7 @@ function Purchases() {
     const getSuggestedPrice = (item) => {
         const pkg = packageSizes.find(p => p.id === item.package_size_id)
         if (!pkg || !item.rate_per_unit) return null
-        return calculateSuggestedPrice(parseFloat(item.rate_per_unit), pkg.pieces_per_box)
+        return calculateSuggestedPrice(parseFloat(item.rate_per_unit), pkg.pieces_per_box, marginPerDozen)
     }
 
     if (!currentSeason) {

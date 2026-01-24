@@ -3,7 +3,7 @@ import { Plus, Search, Phone, MapPin, Wallet, Edit2, Trash2 } from 'lucide-react
 import { supabase } from '../services/supabase'
 import { useToast } from '../components/common/Toast'
 import { Modal } from '../components/common'
-import { formatCurrency } from '../utils/helpers'
+import { formatCurrency, isValidIndianPhone } from '../utils/helpers'
 import './Farmers.css'
 
 function Farmers() {
@@ -18,6 +18,7 @@ function Farmers() {
         phone: '',
         village: ''
     })
+    const [phoneError, setPhoneError] = useState('')
     const [formLoading, setFormLoading] = useState(false)
 
     useEffect(() => {
@@ -44,6 +45,13 @@ function Farmers() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
+
+        // Validate phone if present
+        if (form.phone && !isValidIndianPhone(form.phone)) {
+            setPhoneError('Must be 10 digits starting with 6-9')
+            return
+        }
+
         setFormLoading(true)
 
         try {
@@ -107,12 +115,14 @@ function Farmers() {
             phone: farmer.phone || '',
             village: farmer.village || ''
         })
+        setPhoneError('')
         setShowModal(true)
     }
 
     const openNewModal = () => {
         setEditingFarmer(null)
         setForm({ name: '', phone: '', village: '' })
+        setPhoneError('')
         setShowModal(true)
     }
 
@@ -120,6 +130,7 @@ function Farmers() {
         setShowModal(false)
         setEditingFarmer(null)
         setForm({ name: '', phone: '', village: '' })
+        setPhoneError('')
     }
 
     const filteredFarmers = farmers.filter(f =>
@@ -237,8 +248,18 @@ function Farmers() {
                             type="tel"
                             placeholder="Enter phone number"
                             value={form.phone}
-                            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                            onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                                setForm({ ...form, phone: val })
+                                if (val && !isValidIndianPhone(val)) {
+                                    setPhoneError('Must be 10 digits starting with 6-9')
+                                } else {
+                                    setPhoneError('')
+                                }
+                            }}
+                            maxLength="10"
                         />
+                        {phoneError && <span className="text-danger small">{phoneError}</span>}
                     </div>
                     <div className="form-group">
                         <label>Village</label>

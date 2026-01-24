@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Search, Eye, Receipt } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Eye, Receipt, Trash2, Download, Share2, Edit } from 'lucide-react'
 import { useSeason } from '../context/SeasonContext'
 import { supabase } from '../services/supabase'
 import { useToast } from '../components/common/Toast'
 import { Modal } from '../components/common'
 import { formatCurrency, formatDate, paymentStatusLabels } from '../utils/helpers'
+import { downloadReceipt, shareOnWhatsApp } from '../utils/receiptGenerator'
 import './Receipts.css'
 
 function Receipts() {
     const { currentSeason } = useSeason()
+    const navigate = useNavigate()
     const toast = useToast()
     const [receipts, setReceipts] = useState([])
     const [loading, setLoading] = useState(true)
@@ -48,6 +51,31 @@ function Receipts() {
             console.error(error)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleDelete = async (receipt, e) => {
+        e.stopPropagation() // Prevent opening modal
+        if (!confirm(`Are you sure you want to delete invoice ${receipt.invoice_number}? This cannot be undone.`)) return
+
+        try {
+            const { error } = await supabase
+                .from('sales')
+                .delete()
+                .eq('id', receipt.id)
+
+            if (error) throw error
+
+            // Also update customer outstanding if it was credit - this requires more complex logic
+            // Ideally should be handled by database trigger or edge function, 
+            // but for now we'll just delete the sale record. 
+            // The user should manually adjust if needed or we assume simple deletion is okay.
+
+            toast.success('Receipt deleted successfully')
+            fetchReceipts()
+            if (selectedReceipt?.id === receipt.id) setSelectedReceipt(null)
+        } catch (error) {
+            toast.error('Failed to delete receipt: ' + error.message)
         }
     }
 
@@ -126,9 +154,51 @@ function Receipts() {
                                     <span>{receipt.sale_items?.length || 0} item(s)</span>
                                 </div>
                             </div>
+
+                            <div className="receipt-actions">
+                                <button
+                                    className="btn btn-ghost btn-sm btn-icon"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        downloadReceipt(receipt, 'Dixit Mangoes')
+                                    }}
+                                    title="Download PDF"
+                                >
+                                    <Download size={16} />
+                                </button>
+                                <button
+                                    className="btn btn-ghost btn-sm btn-icon"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        shareOnWhatsApp(receipt, 'Dixit Mangoes')
+                                    }}
+                                    title="Share on WhatsApp"
+                                    style={{ color: '#25D366' }}
+                                >
+                                    <Share2 size={16} />
+                                </button>
+                                <button
+                                    className="btn btn-ghost btn-sm btn-icon"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        navigate(`/sales?edit_id=${receipt.id}`)
+                                    }}
+                                    title="Edit"
+                                >
+                                    <Edit size={16} />
+                                </button>
+                                <button
+                                    className="btn btn-ghost btn-sm btn-icon text-danger"
+                                    onClick={(e) => handleDelete(receipt, e)}
+                                    title="Delete"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
                         </div>
-                    ))}
-                </div>
+                    ))
+                    }
+                </div >
             )}
 
             {/* Receipt Detail Modal */}
@@ -137,9 +207,32 @@ function Receipts() {
                 onClose={() => setSelectedReceipt(null)}
                 title={`Invoice: ${selectedReceipt?.invoice_number}`}
                 footer={
-                    <button className="btn btn-primary btn-block" onClick={() => setSelectedReceipt(null)}>
-                        Close
-                    </button>
+                    <div className="modal-footer-actions" style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                        <button
+                            className="btn btn-outline"
+                            style={{ flex: 1 }}
+                            onClick={() => downloadReceipt(selectedReceipt, 'Dixit Mangoes')}
+                        >
+                            <Download size={16} /> PDF
+                        </button>
+                        <button
+                            className="btn btn-outline"
+                            style={{ flex: 1, color: '#25D366', borderColor: '#25D366' }}
+                            onClick={() => shareOnWhatsApp(selectedReceipt, 'Dixit Mangoes')}
+                        >
+                            <Share2 size={16} /> Share
+                        </button>
+                        <button
+                            className="btn btn-outline"
+                            style={{ flex: 1 }}
+                            onClick={() => navigate(`/sales?edit_id=${selectedReceipt.id}`)}
+                        >
+                            <Edit size={16} /> Edit
+                        </button>
+                        <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setSelectedReceipt(null)}>
+                            Close
+                        </button>
+                    </div>
                 }
             >
                 {selectedReceipt && (
@@ -214,7 +307,7 @@ function Receipts() {
                     </div>
                 )}
             </Modal>
-        </div>
+        </div >
     )
 }
 

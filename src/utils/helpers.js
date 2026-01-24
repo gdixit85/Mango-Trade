@@ -55,6 +55,13 @@ export function generateInvoiceNumber(prefix = 'INV') {
     return `${prefix}${year}${month}${day}${random}`
 }
 
+// Validate Indian phone number
+export function isValidIndianPhone(phone) {
+    if (!phone) return false
+    const cleaned = phone.replace(/\s+/g, '')
+    return /^[6-9]\d{9}$/.test(cleaned)
+}
+
 // Debounce function
 export function debounce(func, wait) {
     let timeout
@@ -70,7 +77,10 @@ export function debounce(func, wait) {
 
 // Customer type labels (delivery is now a separate toggle)
 export const customerTypeLabels = {
+    'walk-in-cash': 'Walk-in (Cash)',
+    'walk-in-online': 'Walk-in (Online)',
     'walk-in': 'Walk-in',
+    'delivery': 'Delivery',
     'credit': 'Credit'
 }
 

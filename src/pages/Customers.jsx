@@ -3,7 +3,10 @@ import { Plus, Search, Phone, MapPin, CreditCard, UserCheck, Truck, Edit2, Trash
 import { supabase } from '../services/supabase'
 import { useToast } from '../components/common/Toast'
 import { Modal } from '../components/common'
-import { formatCurrency, customerTypeLabels } from '../utils/helpers'
+import { useToast } from '../components/common/Toast'
+import { Modal } from '../components/common'
+import { formatCurrency, customerTypeLabels, isValidIndianPhone } from '../utils/helpers'
+import './Customers.css'
 import './Customers.css'
 
 function Customers() {
@@ -18,8 +21,11 @@ function Customers() {
         name: '',
         phone: '',
         address: '',
-        type: 'walk-in'
+        phone: '',
+        address: '',
+        type: 'walk-in-cash'
     })
+    const [phoneError, setPhoneError] = useState('')
     const [formLoading, setFormLoading] = useState(false)
 
     useEffect(() => {
@@ -46,6 +52,13 @@ function Customers() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
+
+        // Validate phone if present
+        if (form.phone && !isValidIndianPhone(form.phone)) {
+            setPhoneError('Must be 10 digits starting with 6-9')
+            return
+        }
+
         setFormLoading(true)
 
         try {
@@ -117,18 +130,21 @@ function Customers() {
 
     const openNewModal = () => {
         setEditingCustomer(null)
-        setForm({ name: '', phone: '', address: '', type: 'walk-in' })
+        setForm({ name: '', phone: '', address: '', type: 'walk-in-cash' })
+        setPhoneError('')
         setShowModal(true)
     }
 
     const closeModal = () => {
         setShowModal(false)
         setEditingCustomer(null)
-        setForm({ name: '', phone: '', address: '', type: 'walk-in' })
+        setForm({ name: '', phone: '', address: '', type: 'walk-in-cash' })
     }
 
     const getTypeIcon = (type) => {
         switch (type) {
+            case 'walk-in-cash':
+            case 'walk-in-online':
             case 'walk-in': return <UserCheck size={14} />
             case 'delivery': return <Truck size={14} />
             case 'credit': return <CreditCard size={14} />
@@ -138,7 +154,9 @@ function Customers() {
 
     const getTypeBadgeClass = (type) => {
         switch (type) {
-            case 'walk-in': return 'badge-info'
+            case 'walk-in-cash': return 'badge-success'
+            case 'walk-in-online': return 'badge-info'
+            case 'walk-in': return 'badge-secondary'
             case 'delivery': return 'badge-warning'
             case 'credit': return 'badge-danger'
             default: return ''
@@ -170,16 +188,16 @@ function Customers() {
                     All
                 </button>
                 <button
-                    className={`filter-tab ${filterType === 'walk-in' ? 'active' : ''}`}
-                    onClick={() => setFilterType('walk-in')}
+                    className={`filter-tab ${filterType === 'walk-in-cash' ? 'active' : ''}`}
+                    onClick={() => setFilterType('walk-in-cash')}
                 >
-                    Walk-in
+                    Walk-in (Cash)
                 </button>
                 <button
-                    className={`filter-tab ${filterType === 'delivery' ? 'active' : ''}`}
-                    onClick={() => setFilterType('delivery')}
+                    className={`filter-tab ${filterType === 'walk-in-online' ? 'active' : ''}`}
+                    onClick={() => setFilterType('walk-in-online')}
                 >
-                    Delivery
+                    Walk-in (Online)
                 </button>
                 <button
                     className={`filter-tab ${filterType === 'credit' ? 'active' : ''}`}
@@ -283,19 +301,19 @@ function Customers() {
                             onChange={(e) => setForm({ ...form, type: e.target.value })}
                             required
                         >
-                            <option value="walk-in">Walk-in</option>
-                            <option value="delivery">Delivery</option>
+                            <option value="walk-in-cash">Walk-in (Cash)</option>
+                            <option value="walk-in-online">Walk-in (Online)</option>
                             <option value="credit">Credit</option>
                         </select>
                     </div>
                     <div className="form-group">
-                        <label>Customer Name {form.type !== 'walk-in' && '*'}</label>
+                        <label>Customer Name {(!form.type.includes('walk-in')) && '*'}</label>
                         <input
                             type="text"
-                            placeholder={form.type === 'walk-in' ? 'Optional for walk-in' : 'Enter customer name'}
+                            placeholder={form.type.includes('walk-in') ? 'Optional for walk-in' : 'Enter customer name'}
                             value={form.name}
                             onChange={(e) => setForm({ ...form, name: e.target.value })}
-                            required={form.type !== 'walk-in'}
+                            required={!form.type.includes('walk-in')}
                         />
                     </div>
                     <div className="form-group">
@@ -304,8 +322,18 @@ function Customers() {
                             type="tel"
                             placeholder="Enter phone number"
                             value={form.phone}
-                            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                            onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                                setForm({ ...form, phone: val })
+                                if (val && !isValidIndianPhone(val)) {
+                                    setPhoneError('Must be 10 digits starting with 6-9')
+                                } else {
+                                    setPhoneError('')
+                                }
+                            }}
+                            maxLength="10"
                         />
+                        {phoneError && <span className="text-danger small">{phoneError}</span>}
                     </div>
                     {(form.type === 'delivery' || form.type === 'credit') && (
                         <div className="form-group">
