@@ -22,6 +22,7 @@ function Purchases() {
     const [form, setForm] = useState({
         farmer_id: '',
         purchase_date: getTodayDate(),
+        payment_method: 'credit',
         notes: '',
         items: [{ package_size_id: '', quantity: 1, rate_per_unit: '' }]
     })
@@ -66,7 +67,7 @@ function Purchases() {
                     .from('purchases')
                     .select(`
             *,
-            farmers (name),
+            farmers (name, total_credit, total_paid),
             purchase_items (
               *,
               package_sizes (name, pieces_per_box)
@@ -128,6 +129,7 @@ function Purchases() {
             if (editingPurchase) {
                 // Update existing purchase
                 const oldTotal = editingPurchase.total_amount || 0
+                const oldMethod = editingPurchase.payment_method || 'credit'
                 const difference = totalAmount - oldTotal
 
                 const { error: purchaseError } = await supabase
@@ -135,6 +137,7 @@ function Purchases() {
                     .update({
                         farmer_id: form.farmer_id,
                         purchase_date: form.purchase_date,
+                        payment_method: form.payment_method,
                         total_amount: totalAmount,
                         notes: form.notes
                     })
@@ -159,32 +162,68 @@ function Purchases() {
 
                 await supabase.from('purchase_items').insert(items)
 
-                // Update farmer credit if farmer changed or amount changed
-                if (editingPurchase.farmer_id !== form.farmer_id) {
-                    // Subtract from old farmer
-                    const oldFarmer = farmers.find(f => f.id === editingPurchase.farmer_id)
+                // Update farmer balances
+                const farmer = farmers.find(f => f.id === form.farmer_id)
+                const oldFarmerId = editingPurchase.farmer_id
+
+                if (oldFarmerId !== form.farmer_id) {
+                    // Farmer changed - complex case
+                    // 1. Revert old farmer
+                    const oldFarmer = farmers.find(f => f.id === oldFarmerId)
                     if (oldFarmer) {
-                        await supabase
-                            .from('farmers')
-                            .update({ total_credit: Math.max(0, (oldFarmer.total_credit || 0) - oldTotal) })
-                            .eq('id', editingPurchase.farmer_id)
+                        const updates = {
+                            total_credit: Math.max(0, (oldFarmer.total_credit || 0) - oldTotal)
+                        }
+                        if (oldMethod === 'cash') {
+                            updates.total_paid = Math.max(0, (oldFarmer.total_paid || 0) - oldTotal)
+                        }
+                        await supabase.from('farmers').update(updates).eq('id', oldFarmerId)
                     }
-                    // Add to new farmer
-                    const newFarmer = farmers.find(f => f.id === form.farmer_id)
-                    if (newFarmer) {
-                        await supabase
-                            .from('farmers')
-                            .update({ total_credit: (newFarmer.total_credit || 0) + totalAmount })
-                            .eq('id', form.farmer_id)
-                    }
-                } else if (difference !== 0) {
-                    // Same farmer, update credit difference
-                    const farmer = farmers.find(f => f.id === form.farmer_id)
+                    // 2. Apply to new farmer
                     if (farmer) {
-                        await supabase
-                            .from('farmers')
-                            .update({ total_credit: Math.max(0, (farmer.total_credit || 0) + difference) })
-                            .eq('id', form.farmer_id)
+                        const updates = {
+                            total_credit: (farmer.total_credit || 0) + totalAmount
+                        }
+                        if (form.payment_method === 'cash') {
+                            updates.total_paid = (farmer.total_paid || 0) + totalAmount
+                            // Record payment for cash
+                            await supabase.from('farmer_payments').insert([{
+                                farmer_id: form.farmer_id,
+                                season_id: currentSeason.id,
+                                amount: totalAmount,
+                                payment_date: form.purchase_date,
+                                notes: `Auto-payment for Cash Purchase (Updated)`
+                            }])
+                        }
+                        await supabase.from('farmers').update(updates).eq('id', form.farmer_id)
+                    }
+                } else {
+                    // Same farmer - update differences
+                    if (farmer) {
+                        const updates = {
+                            total_credit: Math.max(0, (farmer.total_credit || 0) + difference)
+                        }
+
+                        // Handle paid balance diff
+                        if (oldMethod === 'cash' && form.payment_method === 'cash') {
+                            // Both cash, just apply difference to paid
+                            updates.total_paid = Math.max(0, (farmer.total_paid || 0) + difference)
+                        } else if (oldMethod === 'credit' && form.payment_method === 'cash') {
+                            // Changed from credit to cash - add full new total to paid
+                            updates.total_paid = (farmer.total_paid || 0) + totalAmount
+                            await supabase.from('farmer_payments').insert([{
+                                farmer_id: form.farmer_id,
+                                season_id: currentSeason.id,
+                                amount: totalAmount,
+                                payment_date: form.purchase_date,
+                                notes: `Auto-payment for Cash Purchase`
+                            }])
+                        } else if (oldMethod === 'cash' && form.payment_method === 'credit') {
+                            // Changed from cash to credit - subtract old total from paid
+                            updates.total_paid = Math.max(0, (farmer.total_paid || 0) - oldTotal)
+                        }
+
+                        await supabase.from('farmers').update(updates).eq('id', form.farmer_id)
                     }
                 }
 
@@ -197,6 +236,7 @@ function Purchases() {
                         season_id: currentSeason.id,
                         farmer_id: form.farmer_id,
                         purchase_date: form.purchase_date,
+                        payment_method: form.payment_method,
                         total_amount: totalAmount,
                         notes: form.notes
                     }])
@@ -220,12 +260,29 @@ function Purchases() {
 
                 if (itemsError) throw itemsError
 
-                // Update farmer's total credit
+                // Update farmer's balances
                 const farmer = farmers.find(f => f.id === form.farmer_id)
                 if (farmer) {
+                    const updates = {
+                        total_credit: (farmer.total_credit || 0) + totalAmount
+                    }
+
+                    if (form.payment_method === 'cash') {
+                        updates.total_paid = (farmer.total_paid || 0) + totalAmount
+
+                        // Also record in farmer_payments forledger consistency
+                        await supabase.from('farmer_payments').insert([{
+                            farmer_id: form.farmer_id,
+                            season_id: currentSeason.id,
+                            amount: totalAmount,
+                            payment_date: form.purchase_date,
+                            notes: `Auto-payment for Cash Purchase`
+                        }])
+                    }
+
                     await supabase
                         .from('farmers')
-                        .update({ total_credit: (farmer.total_credit || 0) + totalAmount })
+                        .update(updates)
                         .eq('id', form.farmer_id)
                 }
 
@@ -245,6 +302,8 @@ function Purchases() {
         if (!confirm(`Delete this purchase from ${purchase.farmers?.name}?\n\nThis will also reduce their outstanding credit.`)) return
 
         try {
+            const isCash = purchase.payment_method === 'cash'
+
             // Delete purchase (cascade will delete items)
             const { error } = await supabase
                 .from('purchases')
@@ -253,12 +312,20 @@ function Purchases() {
 
             if (error) throw error
 
-            // Update farmer's credit
+            // Update farmer's balances
             const farmer = farmers.find(f => f.id === purchase.farmer_id)
             if (farmer) {
+                const updates = {
+                    total_credit: Math.max(0, (farmer.total_credit || 0) - (purchase.total_amount || 0))
+                }
+
+                if (isCash) {
+                    updates.total_paid = Math.max(0, (farmer.total_paid || 0) - (purchase.total_amount || 0))
+                }
+
                 await supabase
                     .from('farmers')
-                    .update({ total_credit: Math.max(0, (farmer.total_credit || 0) - (purchase.total_amount || 0)) })
+                    .update(updates)
                     .eq('id', purchase.farmer_id)
             }
 
@@ -274,6 +341,7 @@ function Purchases() {
         setForm({
             farmer_id: purchase.farmer_id,
             purchase_date: formatDateForInput(purchase.purchase_date),
+            payment_method: purchase.payment_method || 'credit',
             notes: purchase.notes || '',
             items: purchase.purchase_items?.map(item => ({
                 package_size_id: item.package_size_id,
@@ -289,6 +357,7 @@ function Purchases() {
         setForm({
             farmer_id: '',
             purchase_date: getTodayDate(),
+            payment_method: 'credit',
             notes: '',
             items: [{ package_size_id: '', quantity: 1, rate_per_unit: '' }]
         })
@@ -301,6 +370,7 @@ function Purchases() {
         setForm({
             farmer_id: '',
             purchase_date: getTodayDate(),
+            payment_method: 'credit',
             notes: '',
             items: [{ package_size_id: '', quantity: 1, rate_per_unit: '' }]
         })
@@ -354,7 +424,12 @@ function Purchases() {
                                     <span className="mobile-card-title">{purchase.farmers?.name}</span>
                                     <span className="text-muted"> • {formatDate(purchase.purchase_date)}</span>
                                 </div>
-                                <span className="amount">{formatCurrency(purchase.total_amount)}</span>
+                                <span className="amount">
+                                    {formatCurrency(purchase.total_amount)}
+                                    <span className={`method-badge ${purchase.payment_method || 'credit'}`}>
+                                        {purchase.payment_method === 'cash' ? 'Cash' : 'Credit'}
+                                    </span>
+                                </span>
                             </div>
                             <div className="purchase-items">
                                 {purchase.purchase_items?.map((item, idx) => (
@@ -417,6 +492,32 @@ function Purchases() {
                                 onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
                                 required
                             />
+                        </div>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Purchase Method</label>
+                        <div className="radio-group">
+                            <label className={`radio-label ${form.payment_method === 'credit' ? 'active' : ''}`}>
+                                <input
+                                    type="radio"
+                                    name="payment_method"
+                                    value="credit"
+                                    checked={form.payment_method === 'credit'}
+                                    onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+                                />
+                                Credit
+                            </label>
+                            <label className={`radio-label ${form.payment_method === 'cash' ? 'active' : ''}`}>
+                                <input
+                                    type="radio"
+                                    name="payment_method"
+                                    value="cash"
+                                    checked={form.payment_method === 'cash'}
+                                    onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+                                />
+                                Cash
+                            </label>
                         </div>
                     </div>
 
