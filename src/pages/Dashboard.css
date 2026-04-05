@@ -210,3 +210,70 @@
 .stock-available.negative {
     color: var(--color-danger);
 }
+
+/* Sales Split */
+.sales-split-card {
+    margin-bottom: var(--spacing-lg);
+}
+
+.sales-split-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+}
+
+.split-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background-color: var(--color-bg);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+}
+
+.split-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.split-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.split-details {
+    flex: 1;
+}
+
+.split-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-xs);
+    font-weight: 500;
+}
+
+.split-value {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-xs);
+}
+
+.split-percentage {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .sales-split-grid {
+        grid-template-columns: 1fr;
+    }
+}

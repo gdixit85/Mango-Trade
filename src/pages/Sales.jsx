@@ -14,7 +14,7 @@ import {
     paymentStatusLabels,
     isValidIndianPhone
 } from '../utils/helpers'
-import { downloadReceipt, shareOnWhatsApp } from '../utils/receiptGenerator'
+import { generateReceipt, shareReceiptOnWhatsApp } from '../utils/receiptGenerator'
 import './Sales.css'
 
 function Sales() {
@@ -24,7 +24,8 @@ function Sales() {
     const enquiryIdFromUrl = searchParams.get('enquiry_id')
 
     // Wizard state - no more view toggle, wizard is always visible
-    const [wizardStep, setWizardStep] = useState(1) // 1: Customer, 2: Items, 3: Payment
+    const [wizardStep, setWizardStep] = useState(1) // 1: Customer, 2: Items, 3: Payment, 4: Completion
+    const [completedSale, setCompletedSale] = useState(null)
 
     // Data state
     const [sales, setSales] = useState([])
@@ -681,14 +682,15 @@ function Sales() {
             if (itemsError) throw itemsError
 
             // Set last sale for receipt generation and move to step 4
-            setLastSale({
+            const fullSale = {
                 ...finalSale,
                 customers: customers.find(c => c.id === customerId) || { name: form.customer_name, phone: form.customer_phone },
                 sale_items: items.map(i => ({
                     ...i,
                     package_sizes: packageSizes.find(p => p.id === i.package_size_id)
                 }))
-            })
+            }
+            setCompletedSale(fullSale)
             setWizardStep(4)
 
             setCurrentEnquiryId(null) // Clear enquiry reference
@@ -705,7 +707,7 @@ function Sales() {
 
     const resetWizard = () => {
         setWizardStep(1)
-        setLastSale(null)
+        setCompletedSale(null)
         setCustomerSearch('')
         setShowAutocomplete(false)
         setIsCreatingNew(false)
@@ -1189,6 +1191,46 @@ function Sales() {
                                         <Check size={18} /> {editId ? 'Update Sale' : 'Complete Sale'} ({formatCurrency(calculateTotal())})
                                     </>
                                 )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Step 4: Completion & Receipt */}
+                {wizardStep === 4 && completedSale && (
+                    <div className="wizard-content completion-step">
+                        <div className="text-center">
+                            <div className="completion-icon">
+                                <Check size={48} />
+                            </div>
+                            <h3>Sale Completed Successfully!</h3>
+                            <p className="text-muted">Invoice: {completedSale.invoice_number}</p>
+                            <p className="amount-large">{formatCurrency(completedSale.total_amount)}</p>
+                        </div>
+
+                        <div className="receipt-actions">
+                            <button
+                                className="btn btn-primary btn-block mb-3"
+                                onClick={() => shareReceiptOnWhatsApp(completedSale)}
+                            >
+                                <Share2 size={18} /> Share on WhatsApp
+                            </button>
+
+                            <button
+                                className="btn btn-outline btn-block mb-3"
+                                onClick={() => {
+                                    // Generate Receipt directly opens the PDF
+                                    generateReceipt(completedSale)
+                                }}
+                            >
+                                <Download size={18} /> Download PDF
+                            </button>
+
+                            <button
+                                className="btn btn-ghost btn-block"
+                                onClick={resetWizard}
+                            >
+                                Start New Sale
                             </button>
                         </div>
                     </div>

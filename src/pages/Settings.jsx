@@ -443,6 +443,10 @@ function Settings() {
             toast.error('New PIN must be at least 4 digits')
             return
         }
+        if (!/^\d+$/.test(pinForm.newPin)) {
+            toast.error('New PIN must contain only numbers')
+            return
+        }
         if (pinForm.newPin !== pinForm.confirmPin) {
             toast.error('New PINs do not match')
             return

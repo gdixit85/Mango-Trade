@@ -3,10 +3,7 @@ import { Plus, Search, Phone, MapPin, CreditCard, UserCheck, Truck, Edit2, Trash
 import { supabase } from '../services/supabase'
 import { useToast } from '../components/common/Toast'
 import { Modal } from '../components/common'
-import { useToast } from '../components/common/Toast'
-import { Modal } from '../components/common'
 import { formatCurrency, customerTypeLabels, isValidIndianPhone } from '../utils/helpers'
-import './Customers.css'
 import './Customers.css'
 
 function Customers() {
@@ -19,8 +16,6 @@ function Customers() {
     const [editingCustomer, setEditingCustomer] = useState(null)
     const [form, setForm] = useState({
         name: '',
-        phone: '',
-        address: '',
         phone: '',
         address: '',
         type: 'walk-in-cash'

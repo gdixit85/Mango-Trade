@@ -27,11 +27,10 @@ function Dashboard() {
         farmerDues: 0,
         customerOutstanding: 0,
         todaySales: 0,
-        farmerDues: 0,
-        customerOutstanding: 0,
-        todaySales: 0,
         totalExpenses: 0,
-        salesBreakdown: { cash: 0, online: 0, credit: 0 }
+        cashSales: 0,
+        onlineSales: 0,
+        creditSales: 0
     })
     const [recentActivity, setRecentActivity] = useState([])
     const [upcomingEnquiries, setUpcomingEnquiries] = useState([])
@@ -61,26 +60,18 @@ function Dashboard() {
             // Fetch sales total
             const { data: sales } = await supabase
                 .from('sales')
-                .select('total_amount, sale_date')
+                .select('total_amount, sale_date, payment_mode, payment_status')
                 .eq('season_id', currentSeason.id)
 
             const totalSales = sales?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
 
-            // Sales Breakdown
-            const salesBreakdown = {
-                cash: 0,
-                online: 0,
-                credit: 0
-            }
-
-            sales?.forEach(s => {
-                if (s.payment_status === 'paid') {
-                    if (s.payment_mode === 'online') salesBreakdown.online += (s.total_amount || 0)
-                    else salesBreakdown.cash += (s.total_amount || 0)
-                } else {
-                    salesBreakdown.credit += (s.total_amount || 0)
-                }
-            })
+            // Calculate sales split by payment mode
+            const cashSales = sales?.filter(s => s.payment_mode === 'cash' && s.payment_status === 'paid')
+                .reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
+            const onlineSales = sales?.filter(s => s.payment_mode === 'online' && s.payment_status === 'paid')
+                .reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
+            const creditSales = sales?.filter(s => s.payment_status !== 'paid')
+                .reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
 
             // Today's sales
             const today = new Date().toISOString().split('T')[0]
@@ -121,10 +112,10 @@ function Dashboard() {
                 farmerDues,
                 customerOutstanding,
                 todaySales,
-                customerOutstanding,
-                todaySales,
                 totalExpenses: totalExpenses + rentPaid,
-                salesBreakdown
+                cashSales,
+                onlineSales,
+                creditSales
             })
 
             // Fetch recent sales
@@ -333,23 +324,47 @@ function Dashboard() {
                 </div>
             </div>
 
-            {/* Sales Breakdown Card */}
-            <div className="card">
+            {/* Sales Split */}
+            <div className="card sales-split-card">
                 <div className="card-header">
                     <h3 className="card-title">Sales Breakdown</h3>
                 </div>
-                <div className="breakdown-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', padding: '1rem' }}>
-                    <div className="breakdown-stat" style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Cash</div>
-                        <div style={{ fontWeight: '600', color: '#10b981' }}>{formatCurrency(stats.salesBreakdown?.cash || 0)}</div>
+                <div className="sales-split-grid">
+                    <div className="split-item">
+                        <div className="split-icon" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', color: '#22C55E' }}>
+                            <Wallet size={20} />
+                        </div>
+                        <div className="split-details">
+                            <div className="split-label">Cash Sales</div>
+                            <div className="split-value">{formatCurrency(stats.cashSales)}</div>
+                            <div className="split-percentage">
+                                {stats.totalSales > 0 ? ((stats.cashSales / stats.totalSales) * 100).toFixed(1) : 0}%
+                            </div>
+                        </div>
                     </div>
-                    <div className="breakdown-stat" style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Online</div>
-                        <div style={{ fontWeight: '600', color: '#3b82f6' }}>{formatCurrency(stats.salesBreakdown?.online || 0)}</div>
+                    <div className="split-item">
+                        <div className="split-icon" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6' }}>
+                            <CreditCard size={20} />
+                        </div>
+                        <div className="split-details">
+                            <div className="split-label">Online Sales</div>
+                            <div className="split-value">{formatCurrency(stats.onlineSales)}</div>
+                            <div className="split-percentage">
+                                {stats.totalSales > 0 ? ((stats.onlineSales / stats.totalSales) * 100).toFixed(1) : 0}%
+                            </div>
+                        </div>
                     </div>
-                    <div className="breakdown-stat" style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Credit</div>
-                        <div style={{ fontWeight: '600', color: '#f59e0b' }}>{formatCurrency(stats.salesBreakdown?.credit || 0)}</div>
+                    <div className="split-item">
+                        <div className="split-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B' }}>
+                            <AlertCircle size={20} />
+                        </div>
+                        <div className="split-details">
+                            <div className="split-label">Credit Sales</div>
+                            <div className="split-value">{formatCurrency(stats.creditSales)}</div>
+                            <div className="split-percentage">
+                                {stats.totalSales > 0 ? ((stats.creditSales / stats.totalSales) * 100).toFixed(1) : 0}%
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

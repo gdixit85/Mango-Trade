@@ -26,6 +26,7 @@ const navItems = [
     { path: '/sales', icon: CreditCard, label: 'Sales' },
     { path: '/purchases', icon: ShoppingCart, label: 'Purchases' },
     { path: '/all-sales', icon: FileText, label: 'All Sales' },
+    { path: '/receipts', icon: Receipt, label: 'All Receipts' },
     { path: '/customers', icon: UserCheck, label: 'Customers' },
     { path: '/enquiries', icon: ClipboardList, label: 'Enquiries' },
     { path: '/farmers', icon: Users, label: 'Farmers' },
